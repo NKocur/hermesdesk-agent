@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import { VERSION } from "./config.js";
 import path from "node:path";
+import { requestApproval } from "./ui/approval.js";
 const protectedPart = (p) =>
   /^\.env(?:\.|$)/i.test(p) ||
   [".git", ".ssh", ".aws", ".codex", ".claude", ".pi", "node_modules"].includes(
@@ -94,7 +94,9 @@ export function policyExtension({
           mutation = shell || ["edit", "write"].includes(name);
         if (readOnly && mutation)
           return { block: true, reason: "Read-only mode is enabled." };
-        if (!shell) workspacePath(root, input.path || ".");
+        const target = shell
+          ? undefined
+          : workspacePath(root, input.path || ".");
         if (mutation) {
           if (!shell && approveWrites) return;
           if (!ctx.hasUI)
@@ -104,18 +106,7 @@ export function policyExtension({
                 ? "Shell commands require interactive approval."
                 : "File changes require interactive approval, or explicit --approve-writes.",
             };
-          const detail = shell
-            ? "This command runs with your Windows account permissions, without an OS sandbox.\n\n" +
-              String(input.command || "")
-            : String(input.path) +
-              "\n\n" +
-              (name === "write"
-                ? String(input.content || "")
-                : JSON.stringify(input.edits || input));
-          const yes = await ctx.ui.confirm(
-            shell ? "Approve shell command?" : "Approve " + name + "?",
-            detail,
-          );
+          const yes = await requestApproval(ctx, name, input, target);
           if (!yes)
             return { block: true, reason: "The user declined this action." };
         }
@@ -133,24 +124,6 @@ export function policyExtension({
           truncated: false,
         },
       };
-    });
-    pi.on("session_start", (_e, ctx) => {
-      if (ctx.hasUI) {
-        ctx.ui.setStatus(
-          "hermesdesk",
-          readOnly
-            ? "HermesDesk | read only"
-            : "HermesDesk | ask before edits and commands",
-        );
-        ctx.ui.setHeader(() => ({
-          render: () => [
-            `HermesDesk Agent ${VERSION} | powered by Pi`,
-            "Strata models run remotely. File tools act in this workspace.",
-            "Use /limits for output and thinking settings; /profile extended selects 131K.",
-          ],
-          invalidate() {},
-        }));
-      }
     });
   };
 }

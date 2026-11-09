@@ -2,10 +2,11 @@ import fs from "node:fs";
 import { generationPayload } from "./generation.js";
 import { generationCommands } from "./commands.js";
 import path from "node:path";
-import { projectSessionDir, validateConfig } from "./config.js";
+import { VERSION, projectSessionDir, validateConfig } from "./config.js";
 import { searchTool } from "./search.js";
 import { modelFetch } from "./transport.js";
 import { policyExtension, workspacePath } from "./policy.js";
+import { THEME_DIR, interfaceExtension, themeSetting } from "./ui/extension.js";
 export async function createRuntime({
   config,
   home,
@@ -117,6 +118,9 @@ export async function createRuntime({
       enableInstallTelemetry: false,
       packages: [],
       cacheWarming: "off",
+      // HermesDesk draws its own header; skip Pi's resource listing at startup.
+      quietStartup: "header",
+      theme: themeSetting(),
       retry: { enabled: false },
       providerRetry: { maxRetries: 0, timeoutMs: 1800000 },
       compaction: {
@@ -146,6 +150,7 @@ export async function createRuntime({
         noSkills: true,
         noPromptTemplates: true,
         noThemes: true,
+        additionalThemePaths: [THEME_DIR],
         noContextFiles: true,
         appendSystemPrompt: [
           "You are HermesDesk Agent, a coding assistant powered by a locally hosted model. Inspect before editing, preserve unrelated work, verify changes with appropriate checks, and report results honestly. File tools are restricted to the selected workspace; never bypass a declined action. Shell commands require approval and are not OS-sandboxed.",
@@ -199,6 +204,12 @@ export async function createRuntime({
             onAgentStart: () => {
               requestCount = 0;
             },
+          }),
+          interfaceExtension({
+            version: VERSION,
+            readOnly,
+            approveWrites,
+            read: syncThinking,
           }),
         ],
       },

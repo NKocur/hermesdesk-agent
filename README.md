@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.5.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.6.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.5.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.6.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -39,7 +39,11 @@ hermesdesk.cmd chat --session SESSION_ID
 hermesdesk.cmd chat --read-only
 ```
 
-The interactive terminal uses Pi's UI, streaming, diffs, tool displays, session history and compaction. Escape interrupts work. `/quit` exits; `/new` starts a new conversation and `/resume` opens Pi's session selector. The first interactive startup may download Pi's `fd` helper to this client's own Pi cache. Windows Terminal is recommended. Pi's inherited help and exit hints may still mention `pi`; resume this client with `hermesdesk chat --continue` or `--session ID`.
+The interactive terminal uses Pi's UI, streaming, diffs, tool displays, session history and compaction, with a HermesDesk presentation layer (`src/ui/`). A compact header shows the safety mode and key commands; a two-line footer shows the workspace and git branch, model, thinking effort, output limit, approval mode, token totals and context fill. Tool calls appear as one line with a status mark (`●` running, `✓` done, `✗` failed or declined) and their output sits behind a quiet gutter; `ctrl+o` expands long output. Edits, writes and commands open an approval panel with a diff, file preview or highlighted command: `y` allows once, `n` or Escape denies.
+
+Colors follow the terminal background automatically, using the HermesDesk light or dark palette. Body text keeps the terminal's own foreground color, and fonts and sizes always come from the terminal. Set `HERMESDESK_THEME` to `light` or `dark` to force a palette (for terminals that do not report their background), or `terminal` to use Pi's palette derived from your terminal colors.
+
+Escape interrupts work. `/quit` exits; `/new` starts a new conversation and `/resume` opens Pi's session selector. The first interactive startup may download Pi's `fd` helper to this client's own Pi cache. Windows Terminal is recommended. Pi's inherited help and exit hints may still mention `pi`; resume this client with `hermesdesk chat --continue` or `--session ID`.
 
 File tools are restricted to the chosen project and reject outside links and protected paths such as `.env`, `.git`, credential files and agent configurations. Each edit and shell command asks for approval. Shell commands execute as your user and are **not OS-sandboxed**; after approval they can access anything your account can access. Direct `!` shell shortcuts are disabled so commands use the managed approval path. Project JavaScript extensions, MCP servers and packages are not automatically loaded.
 
@@ -70,7 +74,7 @@ Use these inside interactive chat. Commands run locally, consume no model tokens
 /limits save
 ```
 
-`/limits` opens a selector for the same controls. Profiles are `fast` (32K, thinking off), `balanced` (64K, xhigh), and `extended` (131K, xhigh). Output counts include thinking and answer. The model can stop before the allowance is used, and Strata can reduce the thinking cap to preserve answer room. Individual controls keep your other sampler settings; profiles apply the recommended sampler values.
+`/limits` opens a settings menu for the same controls, showing each current value; `/profile` and `/think` without a value open menus that mark the active choice. Profiles are `fast` (32K, thinking off), `balanced` (64K, xhigh), and `extended` (131K, xhigh). Output counts include thinking and answer. The model can stop before the allowance is used, and Strata can reduce the thinking cap to preserve answer room. Individual controls keep your other sampler settings; profiles apply the recommended sampler values.
 
 Changes last for the current CLI session. `/limits save` keeps generation defaults for future launches; `/limits reset` restores saved defaults. Escape cancels a menu without applying changes. Changes are blocked while the agent is working. Pi's existing `/thinking off|low|medium|high` and keyboard thinking controls now also reach Strata (`high` maps to `xhigh`). Credentials, file permissions and command approvals are unaffected.
 

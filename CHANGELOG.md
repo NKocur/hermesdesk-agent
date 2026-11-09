@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.0-alpha.6
+
+- Add a HermesDesk terminal presentation: light and dark palettes chosen from the terminal background (`HERMESDESK_THEME` overrides), a compact header, and a two-line footer with workspace, branch, model, thinking, output limit, approval mode, token totals and context fill.
+- Show tool calls as single status lines with gutter-framed output instead of padded panels; long output still collapses and expands with `ctrl+o`.
+- Replace raw JSON in approval prompts with a diff, file preview or highlighted command, a scrollable preview, and `y`/`n` shortcuts. Escape and cancel still deny.
+- Give `/limits`, `/profile` and `/think` titled menus with descriptions and the current choice marked.
+- Hide Pi's startup resource listing.
+- Preserve the actual error message when a search fails instead of showing an empty-result label.
+
 ## 0.1.0-alpha.3
 
 - Open browser sign-in automatically from connect on supported servers, with explicit computer approval.

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-export const VERSION = "0.1.0-alpha.5";
+export const VERSION = "0.1.0-alpha.6";
 export const DEFAULTS = {
   baseUrl: null,
   model: null,

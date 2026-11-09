@@ -1,6 +1,6 @@
 {
   "name": "hermesdesk-agent",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Pi-based terminal coding client for HermesDesk and Strata",
   "type": "module",
   "bin": {
@@ -25,7 +25,8 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.5.0"
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0"
   },
   "devDependencies": {
     "prettier": "3.6.2"

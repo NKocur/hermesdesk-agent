@@ -1,5 +1,7 @@
 import { loadConfig, saveConfig, validateConfig } from "./config.js";
-import { profile } from "./generation.js";
+import { PROFILES, profile } from "./generation.js";
+import { limitText } from "./ui/format.js";
+import { chooseItem } from "./ui/menu.js";
 
 const GENERATION_KEYS = [
   "maxTokens",
@@ -25,18 +27,38 @@ export function tokenValue(value, automatic = false) {
 }
 export function generationSummary(config) {
   return [
-    `Total output: ${number(config.maxTokens)} tokens (thinking + answer)`,
-    `Thinking: ${config.thinking ? config.reasoningEffort : "off"}`,
-    `Thinking budget: ${config.thinkingBudget ? number(config.thinkingBudget) : "automatic"}${config.thinking ? "" : " (unused while thinking is off)"}`,
-    `Sampling: temperature ${config.temperature}, top-p ${config.topP}, top-k ${config.topK}`,
-    "Changes apply now to this CLI session. /limits save keeps them for future launches.",
+    "Generation settings",
+    `Output    ${number(config.maxTokens)} tokens, thinking + answer`,
+    `Thinking  ${config.thinking ? config.reasoningEffort : "off"} · budget ${config.thinkingBudget ? number(config.thinkingBudget) : "automatic"}${config.thinking ? "" : " (unused while off)"}`,
+    `Sampling  temperature ${config.temperature} · top-p ${config.topP} · top-k ${config.topK}`,
+    "Applies to this session now. /limits save keeps it for future launches.",
   ].join("\n");
+}
+const PROFILE_NOTES = {
+  fast: "quick answers",
+  balanced: "everyday work",
+  extended: "long tasks",
+};
+const THINK_NOTES = {
+  off: "answer directly",
+  low: "brief reasoning",
+  medium: "moderate reasoning",
+  xhigh: "deepest reasoning",
+};
+/** The profile whose settings exactly match the configuration, if any. */
+export function currentProfile(config) {
+  return Object.keys(PROFILES).find((name) =>
+    Object.entries(PROFILES[name]).every(
+      ([key, value]) => config[key] === value,
+    ),
+  );
 }
 export function generationCommands({ home, read, apply }) {
   return (pi) => {
+    // Interactive chat shows these settings in the HermesDesk footer; other UI hosts get a status.
     const status = (ctx) => {
       const c = read();
-      if (ctx.hasUI)
+      if (ctx.hasUI && ctx.mode !== "tui")
         ctx.ui.setStatus(
           "hermesdesk-generation",
           `${number(c.maxTokens)} tokens | thinking ${c.thinking ? c.reasoningEffort : "off"} | /limits`,
@@ -72,22 +94,28 @@ export function generationCommands({ home, read, apply }) {
         },
       });
     };
-    const choose = async (ctx, title, values) => {
+    const choose = async (ctx, title, items, subtitle) => {
       if (!ctx.hasUI)
         throw Error(
           "Provide a value, or open interactive chat to use the settings menu.",
         );
-      return ctx.ui.select(title, values);
+      return chooseItem(ctx, { title, subtitle, items });
     };
     const selectProfile = async (args, ctx) => {
       idle(ctx);
       const value =
         args ||
-        (await choose(ctx, "Generation profile", [
-          "fast",
-          "balanced",
-          "extended",
-        ]));
+        (await choose(
+          ctx,
+          "Generation profile",
+          Object.entries(PROFILES).map(([name, p]) => ({
+            value: name,
+            label: name,
+            description: `${limitText(p.maxTokens)} output · thinking ${p.thinking ? p.reasoningEffort : "off"} · ${PROFILE_NOTES[name]}`,
+            current: currentProfile(read()) === name,
+          })),
+          "Sets output size, thinking and sampling together.",
+        ));
       if (value === undefined) return;
       await update(profile(value.toLowerCase()), ctx);
     };
@@ -111,12 +139,18 @@ export function generationCommands({ home, read, apply }) {
       idle(ctx);
       const value =
         args ||
-        (await choose(ctx, "Thinking effort", [
-          "off",
-          "low",
-          "medium",
-          "xhigh",
-        ]));
+        (await choose(
+          ctx,
+          "Thinking effort",
+          ["off", "low", "medium", "xhigh"].map((value) => ({
+            value,
+            label: value,
+            description: THINK_NOTES[value],
+            current:
+              value === (read().thinking ? read().reasoningEffort : "off"),
+          })),
+          "Thinking shares the total output limit with the answer.",
+        ));
       if (value === undefined) return;
       const setting = value.toLowerCase();
       if (!["on", "off", "low", "medium", "high", "xhigh"].includes(setting))
@@ -198,19 +232,41 @@ export function generationCommands({ home, read, apply }) {
         if (args) throw Error("Usage: /limits [show|save|reset]");
         idle(ctx);
         const c = read();
-        const actions = [
-          "Choose profile",
-          `Total output: ${number(c.maxTokens)}`,
-          `Thinking: ${c.thinking ? c.reasoningEffort : "off"}`,
-          `Thinking budget: ${c.thinkingBudget ? number(c.thinkingBudget) : "automatic"}`,
-          "Show current settings",
-          "Save as defaults",
-          "Restore saved defaults",
-        ];
+        const budget = c.thinkingBudget
+          ? number(c.thinkingBudget)
+          : "automatic";
+        // Values stay as the plain labels used by non-interactive hosts; the menu shows label + detail.
+        const items = [
+          ["Choose profile", "Profile", currentProfile(c) ?? "custom"],
+          [
+            `Total output: ${number(c.maxTokens)}`,
+            "Total output",
+            `${number(c.maxTokens)} tokens · thinking + answer`,
+          ],
+          [
+            `Thinking: ${c.thinking ? c.reasoningEffort : "off"}`,
+            "Thinking",
+            c.thinking ? c.reasoningEffort : "off",
+          ],
+          [
+            `Thinking budget: ${budget}`,
+            "Thinking budget",
+            budget + (c.thinking ? "" : " · unused while off"),
+          ],
+          ["Show current settings", "Show summary", "print every setting"],
+          ["Save as defaults", "Save as defaults", "keep for future launches"],
+          [
+            "Restore saved defaults",
+            "Restore defaults",
+            "undo session changes",
+          ],
+        ].map(([value, label, description]) => ({ value, label, description }));
+        const actions = items.map((item) => item.value);
         const selected = await choose(
           ctx,
-          "HermesDesk generation settings",
-          actions,
+          "Generation settings",
+          items,
+          "Changes apply now; save to keep them for future launches.",
         );
         if (selected === undefined) return;
         switch (actions.indexOf(selected)) {

@@ -303,11 +303,10 @@ async function main() {
     if (command === "run") {
       await runPrompt(runtime, p.join(" "), { json: !!v.json });
     } else {
-      const { InteractiveMode } = await import(
-        "@earendil-works/pi-coding-agent"
+      const { createInteractiveMode } = await import(
+        "../src/ui/interactive.js"
       );
-      const ui = new InteractiveMode(runtime, {
-        verbose: false,
+      const ui = await createInteractiveMode(runtime, {
         initialMessage: p.length ? p.join(" ") : undefined,
       });
       await ui.run();
