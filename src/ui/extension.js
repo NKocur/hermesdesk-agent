@@ -1,11 +1,12 @@
 // HermesDesk's interactive presentation: theme, header, footer, progress and tool rows.
-// Display only: approval and path decisions stay in policy.js.
+// Approval and path decisions stay in policy.js.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { footerFactory, headerFactory } from "./chrome.js";
 import { approvalMode } from "./format.js";
 import { loadPi } from "./pi.js";
 import { toolRenderer } from "./tools.js";
+import { runInterrupt } from "./interrupt.js";
 
 export const THEME_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -42,9 +43,11 @@ const PULSE = ["·", "•", "●", "•"];
 export function interfaceExtension({ version, readOnly, approveWrites, read }) {
   const mode = approvalMode({ readOnly, approveWrites });
   return (pi) => {
-    let current;
+    let current, removeInterrupt;
     pi.registerToolRenderer(toolRenderer);
     pi.on("session_start", async (_event, ctx) => {
+      removeInterrupt?.();
+      removeInterrupt = undefined;
       current = ctx;
       if (!ctx.hasUI) return;
       if (ctx.mode !== "tui") {
@@ -54,6 +57,7 @@ export function interfaceExtension({ version, readOnly, approveWrites, read }) {
         );
         return;
       }
+      removeInterrupt = ctx.ui.onTerminalInput(runInterrupt(ctx));
       const { keyText } = await loadPi();
       const theme = ctx.ui.theme;
       ctx.ui.setHeader(headerFactory({ version, mode, keyText }));

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.7
+
+- Ctrl+C cancels an active run and returns to the prompt, including streaming replies, running tools and pending approvals. Idle clear-input and double-press-to-exit behavior is preserved.
+- Dismiss pending file/command approvals on run cancellation without allowing the action.
+- Show Ctrl+C stop in the terminal header.
+
 ## 0.1.0-alpha.6
 
 - Add a HermesDesk terminal presentation: light and dark palettes chosen from the terminal background (`HERMESDESK_THEME` overrides), a compact header, and a two-line footer with workspace, branch, model, thinking, output limit, approval mode, token totals and context fill.

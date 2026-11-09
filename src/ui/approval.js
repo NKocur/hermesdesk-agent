@@ -94,10 +94,17 @@ const CHOICES = [
 ];
 
 export class ApprovalDialog {
-  constructor(tui, theme, keybindings, request, done) {
+  constructor(tui, theme, keybindings, request, done, signal) {
     Object.assign(this, { tui, theme, keybindings, request, done });
     this.index = 0;
     this.scroll = 0;
+    this.signal = signal;
+    this.onAbort = () => done(false);
+    signal?.addEventListener("abort", this.onAbort, { once: true });
+    if (signal?.aborted) this.onAbort();
+  }
+  dispose() {
+    this.signal?.removeEventListener("abort", this.onAbort);
   }
   body() {
     this.bodyLines ??= this.request.body(this.theme);
@@ -196,7 +203,7 @@ export async function requestApproval(ctx, name, input, target) {
     const request = describeRequest(await loadPi(), name, input, target);
     const answer = await ctx.ui.custom(
       (tui, theme, keybindings, done) =>
-        new ApprovalDialog(tui, theme, keybindings, request, done),
+        new ApprovalDialog(tui, theme, keybindings, request, done, ctx.signal),
       {
         blocked: {
           kind: "permission",

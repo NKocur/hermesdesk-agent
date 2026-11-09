@@ -17,6 +17,7 @@ import { footerFactory, headerFactory } from "../src/ui/chrome.js";
 import { ApprovalDialog, requestApproval } from "../src/ui/approval.js";
 import { chooseItem } from "../src/ui/menu.js";
 import { toolRenderer } from "../src/ui/tools.js";
+import { runInterrupt } from "../src/ui/interrupt.js";
 import { THEME_DIR, themeSetting } from "../src/ui/extension.js";
 import { currentProfile, generationSummary } from "../src/commands.js";
 import { PROFILES } from "../src/generation.js";
@@ -336,4 +337,58 @@ test("failed search output preserves its actual error rather than saying no matc
     .map(plain)
     .join("\n");
   assert.match(empty, /No matches/);
+});
+
+test("Ctrl+C interrupts active work without invoking idle clear/exit", () => {
+  let idle = false,
+    calls = 0;
+  const handle = runInterrupt({ isIdle: () => idle, abort: () => calls++ });
+  assert.equal(handle("c"), undefined);
+  assert.equal(handle("\x1b"), undefined);
+  assert.equal(handle("\x1b[200~pasted\x03text\x1b[201~"), undefined);
+  assert.equal(calls, 0);
+  assert.deepEqual(handle("\x03"), { consume: true });
+  assert.deepEqual(handle("\x03"), { consume: true });
+  assert.equal(calls, 2);
+  idle = true;
+  assert.equal(handle("\x03"), undefined);
+  assert.equal(calls, 2, "idle Ctrl+C remains Pi's clear/exit shortcut");
+});
+
+test("aborting a run dismisses an outstanding approval without allowing it", () => {
+  const controller = new AbortController();
+  const answers = [];
+  const dialog = new ApprovalDialog(
+    {},
+    theme,
+    undefined,
+    { body: () => [] },
+    (value) => answers.push(value),
+    controller.signal,
+  );
+  controller.abort();
+  assert.deepEqual(answers, [false]);
+  dialog.dispose();
+  const alreadyAborted = [];
+  const second = new ApprovalDialog(
+    {},
+    theme,
+    undefined,
+    { body: () => [] },
+    (value) => alreadyAborted.push(value),
+    controller.signal,
+  );
+  assert.deepEqual(alreadyAborted, [false]);
+  second.dispose();
+  const completed = new AbortController();
+  const disposed = new ApprovalDialog(
+    {},
+    theme,
+    undefined,
+    { body: () => [] },
+    () => assert.fail("closed dialog must not be called again"),
+    completed.signal,
+  );
+  disposed.dispose();
+  completed.abort();
 });

@@ -42,7 +42,7 @@ export function headerFactory({ version, mode, keyText }) {
         theme.fg("accent", "/limits") + theme.fg("dim", " settings"),
         theme.fg("accent", "/profile"),
         theme.fg("accent", "/think"),
-        theme.fg("dim", key("app.interrupt", "esc") + " stop"),
+        theme.fg("dim", "ctrl+c stop"),
         theme.fg("dim", key("app.tools.expand", "ctrl+o") + " tool output"),
       ];
       const room = Math.max(1, width - 3);

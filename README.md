@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.6.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.7.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.6.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.7.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -108,6 +108,8 @@ Fresh installations default to a 131K total cap with thinking off. Existing save
 Changes apply to the next launch. Context is client metadata, not a request to allocate more server context: keep it at or below the server's configured capacity. The updated gateway allows up to 131072 combined output tokens. Input, thinking and answer share the server context; the full 262K-thinking plus 131K-answer allowance in Qwen documentation assumes an extended 1M context. The default request budget is 64 per message and can be set from 1 to 512. Pi's in-chat settings are session-only in this version. Change the server using `hermesdesk connect --url https://your-server/v1`. HTTP is accepted only on loopback addresses.
 
 Windows uses its built-in `curl.exe` for model HTTP requests because the retained Cloudflare bot filter challenged Node fetch and a native Node follow-up request during testing. TLS verification stays enabled, redirects are not followed, credentials are sent through stdin rather than command-line arguments, and disconnects cancel the request. `doctor` checks the connection without loading the model. A browser challenge from zone-wide Bot Fight Mode cannot be solved by an API client; the server owner must configure API-compatible protection. Transport compatibility alone does not guarantee that every computer will be accepted. Cold Strata startup can still take minutes; the client cannot remove server warm-up costs. A Cloudflare 403 is a connection failure, not a model error.
+
+Press **Ctrl+C** during a run to cancel generation or a running tool and return to the prompt. Pending file/command approvals are dismissed without granting permission. Cancellation does not undo completed actions. Escape also interrupts from the chat editor. When idle, Ctrl+C clears the input; pressing it twice quickly exits. Ctrl+D exits with an empty input.
 
 ## Optional private Worker gateway
 
