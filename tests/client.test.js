@@ -493,3 +493,37 @@ test(
     assert.equal(responsesClosed, 4);
   },
 );
+
+test(
+  "Windows curl delivers small SSE events before the server finishes",
+  { skip: process.platform !== "win32" },
+  async (t) => {
+    let finish;
+    const base = await serve(t, (_req, res) => {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.write("data: first\n\n");
+      // The server cannot finish until the client sees the first tiny event.
+      finish = () => res.end("data: [DONE]\n\n");
+    });
+    const response = await curlFetch(base + "/stream", {
+      signal: AbortSignal.timeout(3000),
+    });
+    const reader = response.body.getReader();
+    try {
+      const first = await reader.read();
+      assert.equal(first.done, false);
+      assert.match(new TextDecoder().decode(first.value), /data: first/);
+      finish();
+      let remaining = "";
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        remaining += new TextDecoder().decode(next.value);
+      }
+      assert.match(remaining, /\[DONE\]/);
+    } finally {
+      finish?.();
+      await reader.cancel().catch(() => {});
+    }
+  },
+);

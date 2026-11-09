@@ -13,15 +13,30 @@ import {
   projectSessionDir,
 } from "../src/config.js";
 import {
-  getCredential,
+  getConnection,
   saveCredential,
   hiddenInput,
   logout,
 } from "../src/credentials.js";
+import { parseConnectionCode, validateAccess } from "../src/connection.js";
+const privateValues = new Set();
+const protect = (value) => {
+  if (value) privateValues.add(value);
+  return value;
+};
+const clearAuthEnv = () => {
+  for (const key of [
+    "HERMESDESK_API_KEY",
+    "HERMESDESK_ACCESS_CLIENT_ID",
+    "HERMESDESK_ACCESS_CLIENT_SECRET",
+    "HERMESDESK_CONNECTION_CODE",
+  ])
+    delete process.env[key];
+};
 import { discover } from "../src/transport.js";
 const help = `HermesDesk Agent ${VERSION} (Pi-based, Windows first)
 
-  hermesdesk connect [--url https://your-server.example/v1]
+  hermesdesk connect [--code | --url https://your-server.example/v1] [--cloudflare-access]
   hermesdesk doctor
   hermesdesk chat [--cwd PATH] [--continue | --session ID] [--read-only]
   hermesdesk run "REQUEST" [--cwd PATH] [--json] [--read-only]
@@ -39,6 +54,8 @@ async function main() {
     allowPositionals: true,
     options: {
       url: { type: "string" },
+      code: { type: "boolean" },
+      "cloudflare-access": { type: "boolean" },
       cwd: { type: "string" },
       session: { type: "string" },
       continue: { type: "boolean" },
@@ -68,12 +85,29 @@ async function main() {
   process.env.PI_CODING_AGENT_DIR = path.join(home, "pi");
   let config = loadConfig(home);
   if (command === "connect") {
+    let imported;
+    if (v.code || process.env.HERMESDESK_CONNECTION_CODE) {
+      if (v.url || v["cloudflare-access"])
+        throw Error(
+          "Use --code on its own; the private code includes the endpoint and credentials.",
+        );
+      imported = parseConnectionCode(
+        protect(
+          process.env.HERMESDESK_CONNECTION_CODE ||
+            (await hiddenInput(
+              "Private HermesDesk connection code (hidden): ",
+            )),
+        ),
+      );
+      config = validateConfig({ ...config, baseUrl: imported.baseUrl });
+      console.log("Connecting to " + config.baseUrl);
+    }
     if (v.url) config = validateConfig({ ...config, baseUrl: v.url });
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
     });
-    if (!v.url && process.stdin.isTTY) {
+    if (!imported && !v.url && process.stdin.isTTY) {
       const answer = await rl.question(
         config.baseUrl
           ? "Server [" + config.baseUrl + "]: "
@@ -87,13 +121,33 @@ async function main() {
       throw Error(
         "Enter your server URL, or use hermesdesk connect --url https://your-server.example/v1.",
       );
-    const token =
-      process.env.HERMESDESK_API_KEY ||
-      (await hiddenInput("HermesDesk API key (hidden): "));
-    const models = await discover(config, token);
+    const token = protect(
+      imported?.token ||
+        process.env.HERMESDESK_API_KEY ||
+        (await hiddenInput("HermesDesk API key (hidden): ")),
+    );
+    let access = imported?.access;
+    if (
+      !access &&
+      (v["cloudflare-access"] ||
+        process.env.HERMESDESK_ACCESS_CLIENT_ID ||
+        process.env.HERMESDESK_ACCESS_CLIENT_SECRET)
+    ) {
+      access = validateAccess({
+        clientId:
+          process.env.HERMESDESK_ACCESS_CLIENT_ID ||
+          (await hiddenInput("Cloudflare Access client ID (hidden): ")),
+        clientSecret:
+          process.env.HERMESDESK_ACCESS_CLIENT_SECRET ||
+          (await hiddenInput("Cloudflare Access client secret (hidden): ")),
+      });
+    }
+    protect(access?.clientSecret);
+    clearAuthEnv();
+    const models = await discover(config, token, access);
     if (!models.length) throw Error("No models are available.");
     if (!models.includes(config.model)) config.model = models[0];
-    await saveCredential(home, config.baseUrl, token);
+    await saveCredential(home, config.baseUrl, token, access);
     saveConfig(config, home);
     console.log(
       "Connected. Credential protected for your Windows account.\nModel: " +
@@ -158,10 +212,12 @@ async function main() {
     throw Error("Unknown command. Use hermesdesk --help.");
   if (!config.baseUrl || !config.model)
     throw Error("Not connected. Run hermesdesk connect first.");
-  const token = await getCredential(home, config.baseUrl);
-  delete process.env.HERMESDESK_API_KEY;
+  const { token, access } = await getConnection(home, config.baseUrl);
+  protect(token);
+  protect(access?.clientSecret);
+  clearAuthEnv();
   if (command === "doctor") {
-    const models = await discover(config, token);
+    const models = await discover(config, token, access);
     console.log(
       JSON.stringify(
         {
@@ -193,6 +249,7 @@ async function main() {
     config,
     home,
     token,
+    access,
     cwd,
     readOnly: !!v["read-only"],
     approveWrites: !!v["approve-writes"],
@@ -223,7 +280,12 @@ async function main() {
 }
 main().catch((e) => {
   let message = e.message || "Operation failed.";
-  for (const secret of [process.env.HERMESDESK_API_KEY])
+  for (const secret of [
+    ...privateValues,
+    process.env.HERMESDESK_API_KEY,
+    process.env.HERMESDESK_ACCESS_CLIENT_SECRET,
+    process.env.HERMESDESK_CONNECTION_CODE,
+  ])
     if (secret) message = message.split(secret).join("[redacted]");
   if (/<!doctype|<html/i.test(message))
     message =

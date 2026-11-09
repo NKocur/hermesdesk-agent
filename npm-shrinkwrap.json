@@ -12,7 +12,8 @@
         "@earendil-works/pi-coding-agent": "1.5.0"
       },
       "bin": {
-        "hermesdesk": "bin/hermesdesk.js"
+        "hermesdesk": "bin/hermesdesk.js",
+        "hermesdesk-agent": "bin/hermesdesk.js"
       },
       "devDependencies": {
         "prettier": "3.6.2"

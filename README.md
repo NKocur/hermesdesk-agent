@@ -22,6 +22,10 @@ Alternatively, download and extract a Windows alpha bundle from [Releases](https
 
 There is no default server address. `connect` asks for your HTTPS inference endpoint ending in `/v1`; for a server on this computer, loopback HTTP is also accepted. Enter a per-computer inference API key created in HermesDesk Settings > Connect coding tools. Use the Hermes/OpenAI-compatible key option; all current inference keys work with this client. The model is discovered automatically if the configured ID is unavailable. No keys are included in the package.
 
+For an Access-protected Worker, select **HermesDesk Agent** in the server's **Connect coding tools** settings and create a connection. Run `hermesdesk.cmd connect --code`, then paste its private connection code at the hidden prompt. The code contains both model and Cloudflare Access credentials: treat it like a password. It is never passed as a command-line argument or saved in plain text. The server's normal key expiry and revocation still apply. The package also provides `hermesdesk-agent` as an alias for `hermesdesk`.
+
+Manual Access setup is available with `hermesdesk connect --url https://your-worker.example/v1 --cloudflare-access`; all credentials are prompted privately. For session-only authentication, set `HERMESDESK_API_KEY`, `HERMESDESK_ACCESS_CLIENT_ID` and `HERMESDESK_ACCESS_CLIENT_SECRET`. Non-interactive setup on Windows can use `HERMESDESK_CONNECTION_CODE` with `connect --code`. The agent clears these variables before launching coding tools. Saved Access credentials are bound to the endpoint and removed by logout along with the model key.
+
 On Windows, saved keys are encrypted using DPAPI for the signed-in Windows user and bound to the configured endpoint. Configuration and sessions are stored under `%LOCALAPPDATA%\HermesDeskAgent`. The key is not written to Pi's auth JSON or passed on a command line. `HERMESDESK_API_KEY` supports session-only authentication; the client removes it from its environment before coding tools run. `hermesdesk logout` deletes the saved credential, but does not revoke it on the server.
 
 ## Work on a project
@@ -67,6 +71,10 @@ hermesdesk.cmd config set maxRequests 64
 Changes apply to the next launch. Context is client metadata, not a request to allocate more server context: keep it at or below the server's configured capacity. Output is capped at 8192 by the gateway. The default request budget is 64 per message and can be set from 1 to 512. Pi's in-chat settings are session-only in this version. Change the server using `hermesdesk connect --url https://your-server/v1`. HTTP is accepted only on loopback addresses.
 
 Windows uses its built-in `curl.exe` for model HTTP requests because the retained Cloudflare bot filter challenged Node fetch and a native Node follow-up request during testing. TLS verification stays enabled, redirects are not followed, credentials are sent through stdin rather than command-line arguments, and disconnects cancel the request. `doctor` checks the connection without loading the model. A browser challenge from zone-wide Bot Fight Mode cannot be solved by an API client; the server owner must configure API-compatible protection. Transport compatibility alone does not guarantee that every computer will be accepted. Cold Strata startup can still take minutes; the client cannot remove server warm-up costs. A Cloudflare 403 is a connection failure, not a model error.
+
+## Optional private Worker gateway
+
+The generic Worker source and deployment notes are in [worker/](worker/README.md). It requires Cloudflare Access authentication for its configured application and proxies only model discovery and chat completions to a single private VPC Service. It exposes no desktop tools, file APIs, application sessions, or arbitrary destinations. Website Bot Fight Mode can remain enabled when the agent uses a separate `workers.dev` endpoint. Workers VPC is beta; check Cloudflare's current availability, pricing and limits before adopting it.
 
 ## Develop
 

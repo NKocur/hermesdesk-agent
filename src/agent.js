@@ -8,6 +8,7 @@ export async function createRuntime({
   config,
   home,
   token,
+  access,
   cwd = process.cwd(),
   readOnly = false,
   approveWrites = false,
@@ -39,7 +40,7 @@ export async function createRuntime({
     allowModelNetwork: false,
     refreshOnCreate: false,
   });
-  const safeFetch = modelFetch(config.baseUrl);
+  const safeFetch = modelFetch(config.baseUrl, access);
   let requestCount = 0;
   modelRuntime.registerProvider("hermesdesk", {
     name: "HermesDesk / Strata",
