@@ -10,13 +10,15 @@ An initial Windows-first coding CLI built on the pinned Pi 1.5.0 SDK. The model 
 
 ## Install on a Windows computer
 
-Install Node.js 22.19 or newer (Node 24 recommended). Download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases), then run `Install Agent.cmd`, or install the supplied package:
+Install Node.js 22.19 or newer (Node 24 recommended), then install the alpha from npm:
 
 ```powershell
-npm.cmd install -g --ignore-scripts "C:\path\to\hermesdesk-agent-0.1.0-alpha.1.tgz"
+npm.cmd install -g --ignore-scripts hermesdesk-agent@alpha
 hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
+
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.1.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS inference endpoint ending in `/v1`; for a server on this computer, loopback HTTP is also accepted. Enter a per-computer inference API key created in HermesDesk Settings > Connect coding tools. Use the Hermes/OpenAI-compatible key option; all current inference keys work with this client. The model is discovered automatically if the configured ID is unavailable. No keys are included in the package.
 
