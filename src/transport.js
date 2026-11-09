@@ -97,13 +97,16 @@ export async function discover(config, token, access) {
       (r.headers.get("cf-mitigated") === "challenge" ||
         (r.headers.get("content-type") || "").includes("text/html"));
     const error = new Error(
-      r.status === 401
-        ? "API key is invalid, revoked or expired."
-        : challenge
-          ? "Cloudflare blocked this API request with a browser challenge. The server owner needs to adjust protection for the API endpoint."
-          : r.status === 403 || r.status === 302
-            ? "Cloudflare Access denied this connection. Use a new HermesDesk connection code or check the Access credentials."
-            : "Model discovery failed (HTTP " + r.status + ").",
+      r.status === 401 &&
+      (r.headers.get("content-type") || "").includes("text/html")
+        ? "Cloudflare sign-in is required. Run hermesdesk connect to sign in in your browser."
+        : r.status === 401
+          ? "API key is invalid, revoked or expired."
+          : challenge
+            ? "Cloudflare blocked this API request with a browser challenge. The server owner needs to adjust protection for the API endpoint."
+            : r.status === 403 || r.status === 302
+              ? "Cloudflare Access denied this connection. Use a new HermesDesk connection code or check the Access credentials."
+              : "Model discovery failed (HTTP " + r.status + ").",
     );
     error.code = challenge ? "CLOUDFLARE_CHALLENGE" : "MODEL_DISCOVERY_FAILED";
     error.status = r.status;

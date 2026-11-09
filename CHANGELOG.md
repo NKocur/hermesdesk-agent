@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.3
+
+- Open browser sign-in automatically from connect on supported servers, with explicit computer approval.
+- Add a loopback callback, state binding, short-lived one-use codes and S256 PKCE exchange over HTTPS.
+- Add --no-browser and --manual fallbacks, cancellation and timeout handling.
+- Distinguish a Cloudflare sign-in response from an invalid model key.
+
 ## 0.1.0-alpha.2
 
 - Add private connection-code setup for Cloudflare Access-protected Worker gateways, with endpoint-bound encrypted storage for both credentials.

@@ -136,3 +136,47 @@ test("forged assertion headers cannot replace platform-verified Access context",
     403,
   );
 });
+
+test("only exact sign-in routes work without Access and the exchange stays bounded", async () => {
+  let calls = 0;
+  const env = {
+    ...config,
+    LOGIN_WEBSITE: "https://desk.example/",
+    AUTH_LIMIT: { limit: async () => ({ success: true }) },
+    MODEL_GATEWAY: {
+      async fetch(url, init) {
+        calls++;
+        assert.equal(url, "http://models.example/auth/token");
+        assert.equal(init.headers.authorization, undefined);
+        return Response.json({ error: "Invalid sign-in" }, { status: 400 });
+      },
+    },
+  };
+  const info = await worker.fetch(request("", "/auth/info"), env);
+  assert.equal(info.status, 200);
+  const data = await info.json();
+  assert.equal(data.token_endpoint, "https://worker.example/auth/token");
+  assert.ok(!JSON.stringify(data).includes("clientSecret"));
+  assert.equal(
+    (await worker.fetch(request("", "/v1/models"), env)).status,
+    403,
+  );
+  assert.equal(
+    (await worker.fetch(request("", "/auth/token/extra"), env)).status,
+    403,
+  );
+  const make = (body) =>
+    request("", "/auth/token", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  assert.equal((await worker.fetch(make("{}"), env)).status, 400);
+  assert.equal(calls, 1);
+  assert.equal((await worker.fetch(make("x".repeat(2049)), env)).status, 413);
+  assert.equal(calls, 1);
+  assert.equal(
+    (await worker.fetch(request("", "/auth/info?x=1"), env)).status,
+    403,
+  );
+});

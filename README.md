@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.2.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.3.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,11 +18,11 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.2.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.3.tgz`.
 
-There is no default server address. `connect` asks for your HTTPS inference endpoint ending in `/v1`; for a server on this computer, loopback HTTP is also accepted. Enter a per-computer inference API key created in HermesDesk Settings > Connect coding tools. Use the Hermes/OpenAI-compatible key option; all current inference keys work with this client. The model is discovered automatically if the configured ID is unavailable. No keys are included in the package.
+There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
-For an Access-protected Worker, select **HermesDesk Agent** in the server's **Connect coding tools** settings and create a connection. Run `hermesdesk.cmd connect --code`, then paste its private connection code at the hidden prompt. The code contains both model and Cloudflare Access credentials: treat it like a password. It is never passed as a command-line argument or saved in plain text. The server's normal key expiry and revocation still apply. The package also provides `hermesdesk-agent` as an alias for `hermesdesk`.
+For optional manual connection-code setup, select **HermesDesk Agent** in the server's **Connect coding tools** settings and create a connection. Run `hermesdesk.cmd connect --code`, then paste its private connection code at the hidden prompt. The code contains both model and Cloudflare Access credentials: treat it like a password. It is never passed as a command-line argument or saved in plain text. The server's normal key expiry and revocation still apply. The package also provides `hermesdesk-agent` as an alias for `hermesdesk`.
 
 Manual Access setup is available with `hermesdesk connect --url https://your-worker.example/v1 --cloudflare-access`; all credentials are prompted privately. For session-only authentication, set `HERMESDESK_API_KEY`, `HERMESDESK_ACCESS_CLIENT_ID` and `HERMESDESK_ACCESS_CLIENT_SECRET`. Non-interactive setup on Windows can use `HERMESDESK_CONNECTION_CODE` with `connect --code`. The agent clears these variables before launching coding tools. Saved Access credentials are bound to the endpoint and removed by logout along with the model key.
 

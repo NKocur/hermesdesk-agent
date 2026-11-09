@@ -18,6 +18,7 @@ import {
   hiddenInput,
   logout,
 } from "../src/credentials.js";
+import { browserLogin } from "../src/browser-login.js";
 import { parseConnectionCode, validateAccess } from "../src/connection.js";
 const privateValues = new Set();
 const protect = (value) => {
@@ -36,7 +37,7 @@ const clearAuthEnv = () => {
 import { discover } from "../src/transport.js";
 const help = `HermesDesk Agent ${VERSION} (Pi-based, Windows first)
 
-  hermesdesk connect [--code | --url https://your-server.example/v1] [--cloudflare-access]
+  hermesdesk connect [--code | --url https://your-server.example/v1] [--manual | --cloudflare-access]
   hermesdesk doctor
   hermesdesk chat [--cwd PATH] [--continue | --session ID] [--read-only]
   hermesdesk run "REQUEST" [--cwd PATH] [--json] [--read-only]
@@ -55,6 +56,8 @@ async function main() {
     options: {
       url: { type: "string" },
       code: { type: "boolean" },
+      manual: { type: "boolean" },
+      "no-browser": { type: "boolean" },
       "cloudflare-access": { type: "boolean" },
       cwd: { type: "string" },
       session: { type: "string" },
@@ -121,6 +124,17 @@ async function main() {
       throw Error(
         "Enter your server URL, or use hermesdesk connect --url https://your-server.example/v1.",
       );
+    if (
+      !imported &&
+      !v.manual &&
+      !v["cloudflare-access"] &&
+      !process.env.HERMESDESK_API_KEY &&
+      !process.env.HERMESDESK_ACCESS_CLIENT_ID
+    ) {
+      imported = await browserLogin(config.baseUrl, {
+        launch: v["no-browser"] ? async () => {} : undefined,
+      });
+    }
     const token = protect(
       imported?.token ||
         process.env.HERMESDESK_API_KEY ||
