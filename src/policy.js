@@ -60,6 +60,8 @@ export function policyExtension({
   root,
   readOnly = false,
   approveWrites = false,
+  approveCommands = false,
+  onPolicyBlock = () => {},
   maxRequests = 16,
   onAgentStart = () => {},
 }) {
@@ -80,6 +82,12 @@ export function policyExtension({
         );
     });
     pi.on("tool_call", async (event, ctx) => {
+      const block = (reason) => {
+        try {
+          onPolicyBlock({ name: event.toolName, reason });
+        } catch {}
+        return { block: true, reason };
+      };
       try {
         const name = event.toolName,
           input = event.input || {};
@@ -94,42 +102,37 @@ export function policyExtension({
             "bash",
           ].includes(name)
         )
-          return { block: true, reason: "Tool is not enabled in this client." };
+          return block("Tool is not enabled in this client.");
         // Smaller models can get stuck repeating one call. Two identical calls in a row are
         // allowed (a retry); further ones are refused before any approval prompt.
         const call = name + "\n" + JSON.stringify(input);
         repeats = call === lastCall ? repeats + 1 : 0;
         lastCall = call;
         if (repeats >= REPEAT_LIMIT)
-          return {
-            block: true,
-            reason:
-              "This exact call was already made " +
+          return block(
+            "This exact call was already made " +
               repeats +
               " times in a row and its result will not change. Use the earlier result, or take a different step.",
-          };
+          );
         const shell = ["powershell", "bash"].includes(name),
           mutation = shell || ["edit", "write"].includes(name);
-        if (readOnly && mutation)
-          return { block: true, reason: "Read-only mode is enabled." };
+        if (readOnly && mutation) return block("Read-only mode is enabled.");
         const target = shell
           ? undefined
           : workspacePath(root, input.path || ".");
         if (mutation) {
-          if (!shell && approveWrites) return;
+          if ((!shell && approveWrites) || (shell && approveCommands)) return;
           if (!ctx.hasUI)
-            return {
-              block: true,
-              reason: shell
-                ? "Shell commands require interactive approval."
+            return block(
+              shell
+                ? "Shell commands require interactive approval, or explicit --approve-commands."
                 : "File changes require interactive approval, or explicit --approve-writes.",
-            };
+            );
           const yes = await requestApproval(ctx, name, input, target);
-          if (!yes)
-            return { block: true, reason: "The user declined this action." };
+          if (!yes) return block("The user declined this action.");
         }
       } catch (e) {
-        return { block: true, reason: e.message };
+        return block(e.message);
       }
     });
     pi.on("user_bash", () => {

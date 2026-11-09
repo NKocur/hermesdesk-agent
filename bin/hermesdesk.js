@@ -1,6 +1,43 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import { profile } from "../src/generation.js";
+import {
+  invalid,
+  outputFormat,
+  positiveInteger,
+  readPrompt,
+  runHeadless,
+} from "../src/headless.js";
+const rawArgs = process.argv.slice(2);
+let requestedOutput =
+  rawArgs.includes("--json") ||
+  rawArgs[0] === "headless" ||
+  rawArgs.includes("--output-format=jsonl") ||
+  rawArgs[rawArgs.indexOf("--output-format") + 1] === "jsonl"
+    ? "jsonl"
+    : rawArgs.includes("--output-format=json") ||
+        rawArgs[rawArgs.indexOf("--output-format") + 1] === "json"
+      ? "json"
+      : "text";
+const sanitize = (value) => {
+  const redact = (text) => {
+    for (const secret of [
+      ...privateValues,
+      process.env.HERMESDESK_API_KEY,
+      process.env.HERMESDESK_ACCESS_CLIENT_SECRET,
+      process.env.HERMESDESK_CONNECTION_CODE,
+    ])
+      if (secret) text = text.split(secret).join("[redacted]");
+    return text;
+  };
+  return typeof value === "string"
+    ? redact(value)
+    : JSON.parse(
+        JSON.stringify(value, (_key, item) =>
+          typeof item === "string" ? redact(item) : item,
+        ),
+      );
+};
 import path from "node:path";
 import readline from "node:readline/promises";
 import { parseArgs } from "node:util";
@@ -41,18 +78,24 @@ const help = `HermesDesk Agent ${VERSION} (Pi-based, Windows first)
   hermesdesk connect [--code | --url https://your-server.example/v1] [--manual | --cloudflare-access]
   hermesdesk doctor
   hermesdesk chat [--cwd PATH] [--continue | --session ID] [--read-only]
-  hermesdesk run "REQUEST" [--cwd PATH] [--json] [--read-only]
+  hermesdesk run "REQUEST" [--cwd PATH] [--output-format text|json|jsonl] [--read-only]
+  hermesdesk run --prompt-file PATH | --stdin [--timeout SECONDS]
+  hermesdesk headless [--cwd PATH] [--continue | --session ID]
   hermesdesk sessions [--cwd PATH]
   hermesdesk config [set KEY VALUE | preset fast|balanced|extended]
   hermesdesk logout
 
 Edits and shell commands ask for approval in interactive chat.
 One-shot runs deny changes by default; --approve-writes permits workspace file edits.
-Shell commands always require interactive approval. This is not an OS sandbox.
+Headless commands are denied unless --approve-commands explicitly permits them.
+--read-only overrides both pre-approvals. Shell commands are not OS-sandboxed.
+headless accepts JSON lines on stdin: prompt, abort, get_state, shutdown.
+Exit codes: 0 complete, 1 failure, 2 invalid input, 3 blocked, 4 output limit,
+            124 timed out, 130 cancelled, 143 terminated.
 Settings: model, context, maxTokens (total thinking + answer), thinking,
 reasoningEffort (low|medium|xhigh), thinkingBudget (0=automatic), temperature, topP, topK, maxRequests.
 Run overrides: --profile fast|balanced|extended --max-tokens N --thinking on|off
-               --reasoning-effort low|medium|xhigh --thinking-budget N
+               --reasoning-effort low|medium|xhigh --thinking-budget N --max-requests N
 `;
 async function main() {
   const { values: v, positionals: p } = parseArgs({
@@ -60,6 +103,12 @@ async function main() {
     options: {
       profile: { type: "string" },
       "max-tokens": { type: "string" },
+      "max-requests": { type: "string" },
+      "prompt-file": { type: "string" },
+      stdin: { type: "boolean" },
+      timeout: { type: "string" },
+      "output-format": { type: "string" },
+      "approve-commands": { type: "boolean" },
       thinking: { type: "string" },
       "reasoning-effort": { type: "string" },
       "thinking-budget": { type: "string" },
@@ -95,6 +144,51 @@ async function main() {
   const command = p.shift() || "chat",
     home = configHome();
   process.env.PI_CODING_AGENT_DIR = path.join(home, "pi");
+  requestedOutput =
+    command === "headless"
+      ? "jsonl"
+      : v["output-format"] === "json"
+        ? "json"
+        : v.json || v["output-format"] === "jsonl"
+          ? "jsonl"
+          : "text";
+  if (v.continue && v.session)
+    throw invalid("Choose --continue or --session ID, not both.");
+  const format = outputFormat(v["output-format"], v.json);
+  const timeout =
+    v.timeout === undefined ? 0 : positiveInteger(v.timeout, "--timeout");
+  if (
+    command === "chat" &&
+    [
+      v["approve-commands"],
+      v.timeout,
+      v["prompt-file"],
+      v.stdin,
+      v["output-format"],
+      v.json,
+    ].some((x) => x !== undefined && x !== false)
+  )
+    throw invalid(
+      "Headless I/O and command pre-approval options apply only to run or headless.",
+    );
+  if (
+    command === "headless" &&
+    (p.length ||
+      v.stdin ||
+      v["prompt-file"] ||
+      (v["output-format"] && format !== "jsonl"))
+  )
+    throw invalid(
+      "headless accepts JSON lines on stdin, without a positional request or prompt file; output is JSONL.",
+    );
+  const prompt =
+    command === "run"
+      ? await readPrompt({
+          args: p,
+          promptFile: v["prompt-file"],
+          stdin: v.stdin,
+        })
+      : undefined;
   let config = loadConfig(home);
   if (command === "connect") {
     let imported;
@@ -217,23 +311,26 @@ async function main() {
     const selected = rows.filter(
       (r) => r.cwd.toLowerCase() === cwd.toLowerCase(),
     );
-    console.log(
-      selected.length
-        ? selected
-            .map(
-              (r) =>
-                r.id +
-                "  " +
-                (r.name || r.firstMessage || "Untitled")
-                  .replace(/\s+/g, " ")
-                  .slice(0, 90),
-            )
-            .join("\n")
-        : "No saved sessions for this project.",
-    );
+    const data = selected.map((r) => ({
+      id: r.id,
+      title: (r.name || r.firstMessage || "Untitled")
+        .replace(/\s+/g, " ")
+        .slice(0, 90),
+      cwd: r.cwd,
+    }));
+    if (format === "json") console.log(JSON.stringify(data));
+    else if (format === "jsonl")
+      for (const row of data)
+        console.log(JSON.stringify({ type: "session", ...row }));
+    else
+      console.log(
+        data.length
+          ? data.map((r) => r.id + "  " + r.title).join("\n")
+          : "No saved sessions for this project.",
+      );
     return;
   }
-  if (!["doctor", "chat", "run"].includes(command))
+  if (!["doctor", "chat", "run", "headless"].includes(command))
     throw Error("Unknown command. Use hermesdesk --help.");
   if (!config.baseUrl || !config.model)
     throw Error("Not connected. Run hermesdesk connect first.");
@@ -263,6 +360,12 @@ async function main() {
     return;
   }
   const overrides = {};
+  if (v["max-requests"] !== undefined)
+    overrides.maxRequests = positiveInteger(
+      v["max-requests"],
+      "--max-requests",
+      512,
+    );
   if (v.profile) Object.assign(overrides, profile(v.profile));
   if (v["max-tokens"] !== undefined)
     overrides.maxTokens = Number(v["max-tokens"]);
@@ -281,9 +384,8 @@ async function main() {
     throw Error(
       'Interactive chat needs a terminal. Use hermesdesk run "request" for one-shot operation.',
     );
-  if (command === "run" && !p.length)
-    throw Error('Provide a request: hermesdesk run "Inspect this project".');
-  const { createRuntime, runPrompt } = await import("../src/agent.js");
+  const denials = [];
+  const { createRuntime } = await import("../src/agent.js");
   const runtime = await createRuntime({
     config,
     home,
@@ -292,16 +394,60 @@ async function main() {
     cwd,
     readOnly: !!v["read-only"],
     approveWrites: !!v["approve-writes"],
+    approveCommands: !!v["approve-commands"],
+    onPolicyBlock: (event) => denials.push(event),
     continueSession: !!v.continue,
     sessionId: v.session,
   });
+  const controller = new AbortController();
   const cancel = () => {
+    controller.abort({ status: "cancelled" });
     void runtime.session.abort();
   };
+  const terminate = () => {
+    controller.abort({ status: "terminated" });
+    void runtime.session.abort();
+  };
+  const brokenOutput = (error) => {
+    if (error.code === "EPIPE") {
+      controller.abort();
+      process.exitCode = 1;
+    } else {
+      controller.abort();
+      process.stderr.write("HermesDesk: Output stream failed.\n");
+      process.exitCode = 1;
+    }
+  };
   process.on("SIGINT", cancel);
+  process.on("SIGTERM", terminate);
+  process.stdout.on("error", brokenOutput);
   try {
     if (command === "run") {
-      await runPrompt(runtime, p.join(" "), { json: !!v.json });
+      const result = await runHeadless(runtime, prompt, {
+        format,
+        timeout,
+        denials,
+        signal: controller.signal,
+        sanitize,
+      });
+      process.exitCode = result.exitCode;
+    } else if (command === "headless") {
+      const { serveHeadless } = await import("../src/headless-rpc.js");
+      const result = await serveHeadless(runtime, {
+        timeout,
+        denials,
+        signal: controller.signal,
+        sanitize,
+        permissions: {
+          readOnly: !!v["read-only"],
+          approveWrites: !!v["approve-writes"] && !v["read-only"],
+          approveCommands: !!v["approve-commands"] && !v["read-only"],
+        },
+      });
+      process.exitCode = result?.exitCode || 0;
+      if (controller.signal.aborted)
+        process.exitCode =
+          controller.signal.reason?.status === "terminated" ? 143 : 130;
     } else {
       const { createInteractiveMode } = await import(
         "../src/ui/interactive.js"
@@ -313,21 +459,29 @@ async function main() {
     }
   } finally {
     process.off("SIGINT", cancel);
+    process.off("SIGTERM", terminate);
     await runtime.dispose();
+    // Leave the output error listener installed until buffered stdout is flushed at exit.
   }
 }
 main().catch((e) => {
-  let message = e.message || "Operation failed.";
-  for (const secret of [
-    ...privateValues,
-    process.env.HERMESDESK_API_KEY,
-    process.env.HERMESDESK_ACCESS_CLIENT_SECRET,
-    process.env.HERMESDESK_CONNECTION_CODE,
-  ])
-    if (secret) message = message.split(secret).join("[redacted]");
+  let message = sanitize(e.message || "Operation failed.");
   if (/<!doctype|<html/i.test(message))
     message =
       "Cloudflare rejected the API request. Run hermesdesk doctor to check the connection.";
-  console.error("HermesDesk: " + message.slice(0, 1200));
-  process.exitCode = 1;
+  const exitCode = e.exitCode || (e.code?.startsWith("ERR_PARSE_ARGS") ? 2 : 1);
+  if (requestedOutput !== "text")
+    process.stdout.write(
+      JSON.stringify({
+        type: "done",
+        version: VERSION,
+        ok: false,
+        status: exitCode === 2 ? "invalid" : "failed",
+        exitCode,
+        session: null,
+        error: message.slice(0, 1200),
+      }) + "\n",
+    );
+  else console.error("HermesDesk: " + message.slice(0, 1200));
+  process.exitCode = exitCode;
 });

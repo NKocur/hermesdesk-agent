@@ -30,6 +30,8 @@ export async function createRuntime({
   cwd = process.cwd(),
   readOnly = false,
   approveWrites = false,
+  approveCommands = false,
+  onPolicyBlock = () => {},
   continueSession = false,
   sessionId,
 }) {
@@ -148,6 +150,17 @@ export async function createRuntime({
       },
     });
     const instructions = [];
+    if (approveWrites || approveCommands)
+      instructions.push(
+        "For this launch, the user explicitly pre-approved: " +
+          [
+            approveWrites && "workspace file edits",
+            approveCommands && "shell commands",
+          ]
+            .filter(Boolean)
+            .join(" and ") +
+          ". Read-only mode and protected file rules still apply.",
+      );
     try {
       const file = workspacePath(target, "AGENTS.md");
       if (fs.existsSync(file) && fs.statSync(file).size <= 65536)
@@ -212,6 +225,8 @@ export async function createRuntime({
             root: target,
             readOnly,
             approveWrites,
+            approveCommands,
+            onPolicyBlock,
             maxRequests: config.maxRequests,
             onAgentStart: () => {
               requestCount = 0;

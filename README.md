@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.8.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.9.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.8.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.9.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -53,15 +53,60 @@ File tools are restricted to the chosen project and reject outside links and pro
 
 The root project's `AGENTS.md` is included as instructions when it is an ordinary allowed file under 64 KiB. Existing global Pi/Claude settings are not imported. This first version does not synchronize HermesDesk chats, workspace memory or Hermes's skill-learning loop.
 
-## One-shot requests
+## Headless jobs and automation
+
+No terminal window is required. Sign in once with `hermesdesk connect` under the account that runs the job, or provide the existing session-only authentication environment variables. Authentication setup is never prompted during a job. Models still run on your configured HermesDesk/Strata server; tools work on the computer running the CLI.
 
 ```powershell
 hermesdesk.cmd run "Explain this repository" --read-only
-hermesdesk.cmd run "Create a small example file" --approve-writes
-hermesdesk.cmd run "Summarize README.md" --json
+hermesdesk.cmd run "Review the code" --output-format json --timeout 300
+hermesdesk.cmd run --prompt-file request.txt --output-format json
+Get-Content -Raw request.txt | hermesdesk.cmd run --stdin --json
+hermesdesk.cmd run "Continue the review" --continue --output-format json
+hermesdesk.cmd sessions --output-format json
 ```
 
-One-shot operation denies writes unless `--approve-writes` is explicitly provided. It never approves shell commands without interactive confirmation. JSON mode streams `text`, `tool` and `done` records to stdout; diagnostics go to stderr.
+Request sources are positional text, `--prompt-file PATH`, or piped UTF-8 text using `--stdin` / `run -`. Choose one source. Requests are limited to 1 MiB. Prompt file paths resolve from the launching directory; `--cwd PATH` selects the agent's workspace. Headless prompts are task text: slash commands are not dispatched, and bang commands are rejected.
+
+`--output-format text` streams reply text to stdout and tool notices to stderr. `--output-format json` writes one final JSON object. `--output-format jsonl` streams `start`, `text`, `tool`, `tool_result`, `error` and `done` records; `--json` remains an alias for JSONL. There are no TUI escape sequences or progress spinners. The final result includes `ok`, `status`, `exitCode`, `session`, final/partial `text`, `stopReason`, per-job token `usage` and `durationMs`. Policy refusals appear in `blocked`. Model reasoning is not included in the output stream. Save results using normal shell redirection.
+
+Jobs save their conversations automatically. Use `--continue` for the newest conversation in the selected workspace, or `--session ID` for a specific conversation. History stays on the client computer. Profiles and generation overrides work as in interactive chat; `--max-requests N` bounds model requests for that job. `--timeout SECONDS` applies to an entire job after runtime startup, including tools; without it, the provider's own timeout still applies. Ctrl+C/SIGINT cancels work; SIGTERM cancels and exits. Cancellation does not undo completed actions.
+
+File changes are denied unless launched with `--approve-writes`. Shell commands are denied unless launched with `--approve-commands`; this explicitly authorizes model-generated commands with the launching account's permissions, including access outside the workspace. Shell execution has no OS sandbox. `--read-only` takes precedence over both options; protected file-tool paths remain blocked even when writes are pre-approved. Any policy refusal makes the final job status `blocked`, even if the model subsequently writes a response. Ordinary tool failures can be recovered from by the model.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Completed |
+| 1 | Model, connection or runtime failure |
+| 2 | Invalid request/options or oversized protocol input |
+| 3 | One or more actions blocked by policy |
+| 4 | Reply stopped at the output limit |
+| 124 | Job time limit reached |
+| 130 | Cancelled / SIGINT |
+| 143 | SIGTERM |
+
+## Persistent headless protocol
+
+Applications can spawn this command with stdin, stdout and stderr pipes:
+
+```powershell
+hermesdesk.cmd headless --cwd C:\Projects\MyProject --read-only
+```
+
+This is HermesDesk's version 1 JSONL protocol, separate from Pi's native RPC protocol. It opens no HTTP/TCP listener. A process uses one workspace and one conversation, with one active job at a time. Launch options set its permissions; protocol messages cannot grant more access. Use the existing authenticated model endpoint when the model server is on another computer.
+
+The first stdout record has `type: "ready"`, protocol/version, workspace, session, permissions and supported commands. Send one JSON object per line:
+
+```jsonl
+{"id":"review-1","type":"prompt","message":"Review this project","timeout":300}
+{"id":"state-1","type":"get_state"}
+{"id":"cancel-1","type":"abort"}
+{"id":"exit-1","type":"shutdown"}
+```
+
+Each command receives a `response` with its optional correlation `id`, `command` and `success`; failures include `error`. A prompt's acknowledgement means accepted. Its streamed events and final `done` retain the prompt ID. `done.ok` and `done.status` report the outcome. Concurrent prompts are rejected; send another after `done`, or abort the active prompt and wait for its `done` first. `get_state` reports the session and whether a job is active. `abort` cancels work and leaves the process available. `shutdown` cancels active work, flushes results and exits; closing stdin instead lets the current job finish and then exits. A job's failure is reported in `done`; the persistent process stays available until shutdown. Malformed command lines receive an error response. Lines larger than 1 MiB close the process with exit 2. A disconnected output pipe cancels active work.
+
+Use `--continue` or `--session ID` when starting the process to restore an earlier conversation. For scheduled jobs under another Windows account, sign in under that account or provide session-only credentials; the saved DPAPI credentials belong to the account that created them.
 
 ## In-chat controls
 

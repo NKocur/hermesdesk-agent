@@ -7,3 +7,5 @@ Keys are protected using Windows DPAPI and are not included in session files or 
 For a vulnerability, use this repository's GitHub private vulnerability reporting feature when available. Otherwise open a minimal issue requesting a private contact channel without exploit details or secrets. Do not publish exploit details until a fix is available.
 
 Only the latest alpha is supported.
+
+Headless jobs deny writes and shell commands by default. `--approve-writes` explicitly permits workspace file changes; `--approve-commands` explicitly permits shell commands with the launching account's full OS access. Read-only mode overrides both options. The persistent headless protocol uses local process pipes and does not open a network port. Its launch permissions cannot be escalated by protocol messages. Authentication environment variables are removed before tools run. Cancellation stops pending work and does not roll back completed actions.

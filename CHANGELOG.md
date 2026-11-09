@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.9
+
+- Add a persistent `headless` JSONL mode with correlated prompts, job events/results, state queries, cancellation and graceful shutdown; it keeps one conversation and workspace per process and opens no network port.
+- Extend `run` with UTF-8 stdin/prompt files, final JSON or streamed JSONL, per-job timeouts, request budgets and distinct exit codes for failures, policy refusals, output limits and cancellation.
+- Keep session resumption available in both modes and add machine-readable session listings.
+- Deny headless writes and shell commands by default; support explicit `--approve-writes` and `--approve-commands`, with read-only mode taking precedence and protected file paths preserved.
+- Keep machine output separate from interactive presentation and redact authentication credentials from reported results/errors.
+
 ## 0.1.0-alpha.8
 
 - Show what a local model is doing while you wait: time waiting for the first token, then thinking, writing or tool-call preparation with an estimated token rate, and a note when output stalls.
