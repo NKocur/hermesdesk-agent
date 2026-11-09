@@ -5,6 +5,7 @@ import readline from "node:readline/promises";
 import { parseArgs } from "node:util";
 import {
   VERSION,
+  supportedNode,
   configHome,
   loadConfig,
   saveConfig,
@@ -56,6 +57,12 @@ async function main() {
     console.log(VERSION);
     return;
   }
+  if (!supportedNode())
+    throw Error(
+      "Node.js " +
+        process.versions.node +
+        " is too old. Install Node.js 24 (minimum supported: 22.19.0), close this terminal and open a new one, then run node --version before trying again.",
+    );
   const command = p.shift() || "chat",
     home = configHome();
   process.env.PI_CODING_AGENT_DIR = path.join(home, "pi");

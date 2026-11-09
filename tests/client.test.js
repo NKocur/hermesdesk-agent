@@ -453,3 +453,43 @@ test("the actual Pi agent can invoke the custom search schema and receive matchi
   const result = r.calls[1].messages.find((m) => m.role === "tool");
   assert.match(JSON.stringify(result.content), /MARKER_428/);
 });
+
+test("unsupported Node versions are rejected before the client attempts connection", async () => {
+  const { supportedNode } = await import("../src/config.js");
+  assert.equal(supportedNode("22.17.1"), false);
+  assert.equal(supportedNode("22.18.0"), false);
+  assert.equal(supportedNode("22.19.0"), true);
+  assert.equal(supportedNode("24.19.0"), true);
+  assert.equal(supportedNode("20.20.0"), false);
+});
+
+test(
+  "cancelling a rejected streamed curl response does not enqueue into a closed controller",
+  { skip: process.platform !== "win32" },
+  async (t) => {
+    let responsesClosed = 0;
+    const base = await serve(t, (_q, r) => {
+      r.writeHead(403, {
+        "Content-Type": "text/html",
+        "cf-mitigated": "challenge",
+        "cf-ray": "fixture-ray",
+      });
+      r.write("<html>Challenge");
+      const timer = setInterval(() => r.write("x".repeat(65536)), 2);
+      r.on("close", () => {
+        clearInterval(timer);
+        responsesClosed++;
+      });
+    });
+    const { discover } = await import("../src/transport.js");
+    for (let i = 0; i < 4; i++)
+      await assert.rejects(
+        discover({ baseUrl: base + "/v1" }, "a".repeat(64)),
+        (e) =>
+          e.code === "CLOUDFLARE_CHALLENGE" &&
+          e.message.includes("fixture-ray"),
+      );
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(responsesClosed, 4);
+  },
+);

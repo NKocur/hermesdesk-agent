@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-export const VERSION = "0.1.0-alpha.1";
+export const VERSION = "0.1.0-alpha.2";
 export const DEFAULTS = {
   baseUrl: null,
   model: null,
@@ -109,5 +109,14 @@ export function projectSessionDir(home, cwd) {
       )
       .digest("hex")
       .slice(0, 24),
+  );
+}
+
+export function supportedNode(version = process.versions.node) {
+  const [major, minor] = version.split(".").map(Number);
+  return (
+    Number.isInteger(major) &&
+    Number.isInteger(minor) &&
+    (major > 22 || (major === 22 && minor >= 19))
   );
 }

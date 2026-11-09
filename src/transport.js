@@ -4,7 +4,6 @@ import { Readable } from "node:stream";
 import zlib from "node:zlib";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { PassThrough } from "node:stream";
 // Use Node's native HTTP transport. The public gateway challenged undici/fetch during testing.
 export async function nativeFetch(input, init) {
   const r = new Request(input, init),
@@ -86,13 +85,23 @@ export async function discover(config, token) {
   });
   if (!r.ok) {
     await r.body?.cancel();
-    throw Error(
+    const challenge =
+      r.status === 403 &&
+      (r.headers.get("cf-mitigated") === "challenge" ||
+        (r.headers.get("content-type") || "").includes("text/html"));
+    const error = new Error(
       r.status === 401
         ? "API key is invalid, revoked or expired."
-        : r.status === 403
-          ? "Cloudflare rejected this client connection."
+        : challenge
+          ? "Cloudflare blocked this API request with a browser challenge. The server owner needs to adjust protection for the API endpoint."
           : "Model discovery failed (HTTP " + r.status + ").",
     );
+    error.code = challenge ? "CLOUDFLARE_CHALLENGE" : "MODEL_DISCOVERY_FAILED";
+    error.status = r.status;
+    const ray = r.headers.get("cf-ray");
+    if (ray && /^[A-Za-z0-9-]{1,100}$/.test(ray))
+      error.message += " Cloudflare Ray: " + ray;
+    throw error;
   }
   const data = await r.json();
   if (!Array.isArray(data.data))
@@ -144,40 +153,58 @@ export async function curlFetch(input, init) {
       ],
       { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
     );
-    const stream = new PassThrough();
-    let buffer = Buffer.alloc(0),
-      headersDone = false,
-      stderr = "",
-      settled = false;
-    const abort = () => {
+    let buffer = Buffer.alloc(0);
+    let headersDone = false,
+      settled = false,
+      bodyClosed = false,
+      controller;
+    const stopChild = () => {
+      child.stdout.pause();
       child.kill();
-      stream.destroy(new DOMException("Request cancelled", "AbortError"));
-      if (!settled) {
-        settled = true;
-        reject(new DOMException("Request cancelled", "AbortError"));
+    };
+    const finishBody = (error) => {
+      if (bodyClosed) return;
+      bodyClosed = true;
+      if (controller) {
+        if (error) controller.error(error);
+        else controller.close();
       }
     };
-    stream.on("error", () => {});
-    r.signal.addEventListener("abort", abort, { once: true });
-    child.stderr.on("data", (b) => {
-      if (stderr.length < 4096) stderr += b.toString();
-    });
+    const writeBody = (chunk) => {
+      if (bodyClosed || !controller || !chunk.length) return;
+      controller.enqueue(chunk);
+      if (controller.desiredSize <= 0) child.stdout.pause();
+    };
+    const abort = () => {
+      const error = new DOMException("Request cancelled", "AbortError");
+      finishBody(error);
+      stopChild();
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    };
     const fail = () => {
+      if (bodyClosed) return;
       const error = new Error(
         "Windows HTTP transport failed" +
           (child.exitCode ? " (curl " + child.exitCode + ")" : "") +
           ". Check the server address and connection.",
       );
+      finishBody(error);
       if (!settled) {
         settled = true;
         reject(error);
-      } else stream.destroy(error);
+      }
     };
+    r.signal.addEventListener("abort", abort, { once: true });
+    child.stderr.resume();
     child.on("error", fail);
     child.stdin.on("error", () => {});
     child.stdout.on("data", (chunk) => {
+      if (bodyClosed) return;
       if (headersDone) {
-        if (!stream.write(chunk)) child.stdout.pause();
+        writeBody(chunk);
         return;
       }
       buffer = Buffer.concat([buffer, chunk]);
@@ -188,8 +215,8 @@ export async function curlFetch(input, init) {
           match = /^HTTP\/\S+ (\d{3})/.exec(rows.shift());
         buffer = buffer.subarray(end + 4);
         if (!match) {
-          child.kill();
           fail();
+          stopChild();
           return;
         }
         const status = Number(match[1]);
@@ -204,29 +231,39 @@ export async function curlFetch(input, init) {
         headers.delete("content-length");
         headers.delete("transfer-encoding");
         headersDone = true;
-        const response = new Response(
-          [204, 205, 304].includes(status) ? null : Readable.toWeb(stream),
-          { status, headers },
-        );
+        const noBody = [204, 205, 304].includes(status) || r.method === "HEAD";
+        const body = noBody
+          ? null
+          : new ReadableStream({
+              start(value) {
+                controller = value;
+              },
+              pull() {
+                if (!bodyClosed) child.stdout.resume();
+              },
+              cancel() {
+                bodyClosed = true;
+                r.signal.removeEventListener("abort", abort);
+                stopChild();
+              },
+            });
+        const response = new Response(body, { status, headers });
         Object.defineProperty(response, "url", { value: r.url });
         settled = true;
         resolve(response);
-        if (buffer.length && !stream.write(buffer)) child.stdout.pause();
+        writeBody(buffer);
         buffer = Buffer.alloc(0);
         break;
       }
       if (!headersDone && buffer.length > 65536) {
-        child.kill();
         fail();
+        stopChild();
       }
-    });
-    stream.on("drain", () => child.stdout.resume());
-    stream.on("close", () => {
-      if (!child.stdout.readableEnded) child.kill();
     });
     child.on("close", (code) => {
       r.signal.removeEventListener("abort", abort);
-      if (code === 0 && headersDone) stream.end();
+      if (bodyClosed) return;
+      if (code === 0 && headersDone) finishBody();
       else fail();
     });
     if (r.signal.aborted) {
