@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { generationPayload } from "./generation.js";
+import { generationCommands } from "./commands.js";
 import path from "node:path";
-import { projectSessionDir } from "./config.js";
+import { projectSessionDir, validateConfig } from "./config.js";
 import { searchTool } from "./search.js";
 import { modelFetch } from "./transport.js";
 import { policyExtension, workspacePath } from "./policy.js";
@@ -16,6 +17,22 @@ export async function createRuntime({
   continueSession = false,
   sessionId,
 }) {
+  config = validateConfig({ ...config });
+  let activeSession;
+  const syncThinking = () => {
+    if (activeSession) {
+      const level = activeSession.thinkingLevel;
+      config.thinking = level !== "off";
+      if (config.thinking)
+        config.reasoningEffort =
+          level === "low" || level === "minimal"
+            ? "low"
+            : level === "medium"
+              ? "medium"
+              : "xhigh";
+    }
+    return { ...config };
+  };
   const agentDir = path.join(home, "pi");
   fs.mkdirSync(agentDir, { recursive: true });
   process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -54,7 +71,7 @@ export async function createRuntime({
         id: config.model,
         name: config.model,
         input: ["text"],
-        reasoning: config.thinking,
+        reasoning: true,
         contextWindow: config.context,
         maxTokens: config.maxTokens,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -67,6 +84,7 @@ export async function createRuntime({
       },
     ],
     streamSimple: (model, context, options) => {
+      syncThinking();
       if (++requestCount > config.maxRequests)
         throw Error(
           "Request budget reached. Send another message to continue.",
@@ -134,6 +152,45 @@ export async function createRuntime({
           ...instructions,
         ],
         extensionFactories: [
+          generationCommands({
+            home,
+            read: syncThinking,
+            apply: async (next) => {
+              if (!activeSession || !activeSession.isIdle)
+                throw Error("Wait for the agent to become idle.");
+              const current = activeSession.model;
+              if (
+                !current ||
+                current.provider !== "hermesdesk" ||
+                current.id !== config.model
+              )
+                throw Error(
+                  "Select the connected HermesDesk model before changing generation settings.",
+                );
+              await activeSession.setModel({
+                ...current,
+                maxTokens: next.maxTokens,
+                reasoning: true,
+              });
+              Object.assign(config, next);
+              settingsManager.applyOverrides({
+                compaction: {
+                  ...settingsManager.getSettings().compaction,
+                  reserveTokens: Math.min(
+                    config.context - 1024,
+                    Math.max(config.maxTokens + 2048, 16384),
+                  ),
+                },
+              });
+              activeSession.setThinkingLevel(
+                next.thinking
+                  ? next.reasoningEffort === "xhigh"
+                    ? "high"
+                    : next.reasoningEffort
+                  : "off",
+              );
+            },
+          }),
           policyExtension({
             root: target,
             readOnly,
@@ -168,6 +225,7 @@ export async function createRuntime({
             process.platform === "win32" ? "powershell" : "bash",
           ],
     });
+    activeSession = result.session;
     return { ...result, services, diagnostics: services.diagnostics };
   };
   let sessionManager = continueSession

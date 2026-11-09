@@ -146,6 +146,7 @@ export function policyExtension({
           render: () => [
             `HermesDesk Agent ${VERSION} | powered by Pi`,
             "Strata models run remotely. File tools act in this workspace.",
+            "Use /limits for output and thinking settings; /profile extended selects 131K.",
           ],
           invalidate() {},
         }));

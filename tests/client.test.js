@@ -551,3 +551,37 @@ test("extended thinking profile reaches the actual Pi tool loop without an 8K cl
     assert.equal(call.presence_penalty, 0);
   }
 });
+
+test("actual Pi slash commands apply immediately without model calls and native thinking controls reach Strata", async (t) => {
+  const r = await session(t, "read");
+  const before = r.calls.length,
+    messages = r.runtime.session.messages.length;
+  await r.runtime.session.prompt("/profile extended");
+  assert.equal(r.runtime.session.model.maxTokens, 131072);
+  assert.equal(r.runtime.session.thinkingLevel, "high");
+  assert.equal(
+    r.runtime.session.settingsManager.getCompactionSettings().reserveTokens,
+    133120,
+  );
+  await r.runtime.session.prompt("/tokens 65536");
+  await r.runtime.session.prompt("/thinking-budget 8192");
+  assert.equal(r.calls.length, before);
+  assert.equal(r.runtime.session.messages.length, messages);
+  assert.equal(r.runtime.session.model.maxTokens, 65536);
+  assert.equal(
+    r.runtime.session.settingsManager.getCompactionSettings().reserveTokens,
+    67584,
+  );
+  await r.runtime.session.prompt("Confirm the previous marker again.");
+  assert.equal(r.calls.at(-1).max_tokens, 65536);
+  assert.equal(r.calls.at(-1).reasoning_effort, "xhigh");
+  assert.equal(r.calls.at(-1).reasoning_budget_tokens, 8192);
+  r.runtime.session.setThinkingLevel("off");
+  await r.runtime.session.prompt("Confirm the marker once more.");
+  assert.equal(r.calls.at(-1).reasoning_effort, "none");
+  assert.equal(r.calls.at(-1).chat_template_kwargs.enable_thinking, false);
+  r.runtime.session.setThinkingLevel("medium");
+  await r.runtime.session.prompt("Confirm the marker finally.");
+  assert.equal(r.calls.at(-1).reasoning_effort, "medium");
+  assert.equal(r.calls.at(-1).reasoning_budget_tokens, 8192);
+});

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.4.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.5.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.4.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.5.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -54,6 +54,25 @@ hermesdesk.cmd run "Summarize README.md" --json
 ```
 
 One-shot operation denies writes unless `--approve-writes` is explicitly provided. It never approves shell commands without interactive confirmation. JSON mode streams `text`, `tool` and `done` records to stdout; diagnostics go to stderr.
+
+## In-chat controls
+
+Use these inside interactive chat. Commands run locally, consume no model tokens, and change the next request without restarting the conversation:
+
+```text
+/limits
+/profile extended
+/tokens 65536
+/think xhigh
+/thinking-budget 8192
+/thinking-budget auto
+/limits show
+/limits save
+```
+
+`/limits` opens a selector for the same controls. Profiles are `fast` (32K, thinking off), `balanced` (64K, xhigh), and `extended` (131K, xhigh). Output counts include thinking and answer. The model can stop before the allowance is used, and Strata can reduce the thinking cap to preserve answer room. Individual controls keep your other sampler settings; profiles apply the recommended sampler values.
+
+Changes last for the current CLI session. `/limits save` keeps generation defaults for future launches; `/limits reset` restores saved defaults. Escape cancels a menu without applying changes. Changes are blocked while the agent is working. Pi's existing `/thinking off|low|medium|high` and keyboard thinking controls now also reach Strata (`high` maps to `xhigh`). Credentials, file permissions and command approvals are unaffected.
 
 ## Settings
 
