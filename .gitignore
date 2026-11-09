@@ -1,0 +1,11 @@
+node_modules/
+dist/
+maintenance/
+*.tgz
+.local/
+.env
+.env.*
+*.log
+*.dpapi
+.npmrc
+coverage/
