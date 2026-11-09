@@ -1,6 +1,6 @@
 {
   "name": "hermesdesk-agent",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Pi-based terminal coding client for HermesDesk and Strata",
   "type": "module",
   "bin": {

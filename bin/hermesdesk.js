@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { profile } from "../src/generation.js";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { parseArgs } from "node:util";
@@ -42,18 +43,26 @@ const help = `HermesDesk Agent ${VERSION} (Pi-based, Windows first)
   hermesdesk chat [--cwd PATH] [--continue | --session ID] [--read-only]
   hermesdesk run "REQUEST" [--cwd PATH] [--json] [--read-only]
   hermesdesk sessions [--cwd PATH]
-  hermesdesk config [set KEY VALUE]
+  hermesdesk config [set KEY VALUE | preset fast|balanced|extended]
   hermesdesk logout
 
 Edits and shell commands ask for approval in interactive chat.
 One-shot runs deny changes by default; --approve-writes permits workspace file edits.
 Shell commands always require interactive approval. This is not an OS sandbox.
-Settings: model, context, maxTokens, thinking, temperature, topP, topK, maxRequests.
+Settings: model, context, maxTokens (total thinking + answer), thinking,
+reasoningEffort (low|medium|xhigh), thinkingBudget (0=automatic), temperature, topP, topK, maxRequests.
+Run overrides: --profile fast|balanced|extended --max-tokens N --thinking on|off
+               --reasoning-effort low|medium|xhigh --thinking-budget N
 `;
 async function main() {
   const { values: v, positionals: p } = parseArgs({
     allowPositionals: true,
     options: {
+      profile: { type: "string" },
+      "max-tokens": { type: "string" },
+      thinking: { type: "string" },
+      "reasoning-effort": { type: "string" },
+      "thinking-budget": { type: "string" },
       url: { type: "string" },
       code: { type: "boolean" },
       manual: { type: "boolean" },
@@ -178,7 +187,9 @@ async function main() {
     return;
   }
   if (command === "config") {
-    if (p[0] === "set") {
+    if (p[0] === "preset") {
+      config = saveConfig({ ...config, ...profile(p[1]) }, home);
+    } else if (p[0] === "set") {
       const key = p[1];
       if (!Object.hasOwn(config, key) || key === "baseUrl")
         throw Error(
@@ -187,7 +198,7 @@ async function main() {
       const raw = p.slice(2).join(" ");
       if (!raw) throw Error("Provide a setting value.");
       let value = raw;
-      if (key !== "model") {
+      if (!["model", "reasoningEffort"].includes(key)) {
         try {
           value = JSON.parse(raw);
         } catch {
@@ -251,6 +262,20 @@ async function main() {
     if (!models.includes(config.model)) process.exitCode = 1;
     return;
   }
+  const overrides = {};
+  if (v.profile) Object.assign(overrides, profile(v.profile));
+  if (v["max-tokens"] !== undefined)
+    overrides.maxTokens = Number(v["max-tokens"]);
+  if (v["thinking-budget"] !== undefined)
+    overrides.thinkingBudget = Number(v["thinking-budget"]);
+  if (v["reasoning-effort"] !== undefined)
+    overrides.reasoningEffort = v["reasoning-effort"];
+  if (v.thinking !== undefined) {
+    if (!["on", "off"].includes(v.thinking))
+      throw Error("Use --thinking on or --thinking off.");
+    overrides.thinking = v.thinking === "on";
+  }
+  config = validateConfig({ ...config, ...overrides });
   const cwd = fs.realpathSync.native(v.cwd || process.cwd());
   if (command === "chat" && (!process.stdin.isTTY || !process.stdout.isTTY))
     throw Error(

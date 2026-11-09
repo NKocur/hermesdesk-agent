@@ -38,7 +38,7 @@ test("configuration rejects unsafe endpoints and invalid budgets; saves no crede
     { baseUrl: "https://user:secret@example.com/v1" },
     { baseUrl: "https://example.com/v1?x=1" },
     { baseUrl: "https://example.com/api" },
-    { maxTokens: 9000 },
+    { maxTokens: 131073 },
     { thinking: "false" },
     { context: 42 },
   ])
@@ -260,7 +260,7 @@ async function modelServer(t, mode = "read") {
   });
   return { baseUrl: base + "/v1", calls };
 }
-async function session(t, mode, approveWrites = false) {
+async function session(t, mode, approveWrites = false, overrides = {}) {
   const home = folder(t),
     cwd = path.join(home, "work");
   fs.mkdirSync(cwd);
@@ -275,7 +275,12 @@ async function session(t, mode, approveWrites = false) {
       home,
       cwd,
       token: "a".repeat(64),
-      config: validateConfig({ ...server, model: "fixture", maxTokens: 32 }),
+      config: validateConfig({
+        ...server,
+        model: "fixture",
+        maxTokens: 32,
+        ...overrides,
+      }),
       approveWrites,
     });
   t.after(() => runtime.dispose());
@@ -527,3 +532,22 @@ test(
     }
   },
 );
+
+test("extended thinking profile reaches the actual Pi tool loop without an 8K clamp", async (t) => {
+  const { profile } = await import("../src/generation.js");
+  const r = await session(t, "read", false, {
+    ...profile("extended"),
+    thinkingBudget: 16384,
+  });
+  assert.match(r.text, /MARKER_428/);
+  assert.equal(r.calls.length, 2);
+  for (const call of r.calls) {
+    assert.equal(call.max_tokens, 131072);
+    assert.equal(call.reasoning_effort, "xhigh");
+    assert.equal(call.reasoning_budget_tokens, 16384);
+    assert.equal(call.chat_template_kwargs.enable_thinking, true);
+    assert.equal(call.temperature, 1);
+    assert.equal(call.top_p, 0.95);
+    assert.equal(call.presence_penalty, 0);
+  }
+});

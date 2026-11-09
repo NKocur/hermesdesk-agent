@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.3.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.4.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.3.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.4.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -59,16 +59,30 @@ One-shot operation denies writes unless `--approve-writes` is explicitly provide
 
 ```powershell
 hermesdesk.cmd config
+hermesdesk.cmd config preset extended
 hermesdesk.cmd config set thinking true
-hermesdesk.cmd config set context 131072
-hermesdesk.cmd config set maxTokens 4096
+hermesdesk.cmd config set reasoningEffort xhigh
+hermesdesk.cmd config set thinkingBudget 16384
+hermesdesk.cmd config set context 262144
+hermesdesk.cmd config set maxTokens 131072
 hermesdesk.cmd config set temperature 0.7
 hermesdesk.cmd config set topP 0.95
 hermesdesk.cmd config set topK 20
 hermesdesk.cmd config set maxRequests 64
 ```
 
-Changes apply to the next launch. Context is client metadata, not a request to allocate more server context: keep it at or below the server's configured capacity. Output is capped at 8192 by the gateway. The default request budget is 64 per message and can be set from 1 to 512. Pi's in-chat settings are session-only in this version. Change the server using `hermesdesk connect --url https://your-server/v1`. HTTP is accepted only on loopback addresses.
+Profiles: `fast` uses 32K with thinking off; `balanced` uses 64K with xhigh thinking; `extended` uses 131K with xhigh thinking. Thinking profiles use Qwen's recommended sampling (temperature 1, top-p .95, top-k 20). `thinkingBudget 0` is automatic. A positive budget is a ceiling, must be below `maxTokens`, and Strata may reduce it to preserve answer space. `maxTokens` includes **thinking plus the final answer**; the model can stop earlier.
+
+For a single launch, without changing saved settings:
+
+```powershell
+hermesdesk.cmd chat --profile extended
+hermesdesk.cmd run "Review this repository" --read-only --max-tokens 65536 --thinking on --reasoning-effort medium --thinking-budget 8192
+```
+
+Fresh installations default to a 131K total cap with thinking off. Existing saved values are retained: use `config preset extended` to switch to the tested thinking profile. The server must support these limits; older gateways capped output at 8K. Pi's compaction reserves space for the configured output budget.
+
+Changes apply to the next launch. Context is client metadata, not a request to allocate more server context: keep it at or below the server's configured capacity. The updated gateway allows up to 131072 combined output tokens. Input, thinking and answer share the server context; the full 262K-thinking plus 131K-answer allowance in Qwen documentation assumes an extended 1M context. The default request budget is 64 per message and can be set from 1 to 512. Pi's in-chat settings are session-only in this version. Change the server using `hermesdesk connect --url https://your-server/v1`. HTTP is accepted only on loopback addresses.
 
 Windows uses its built-in `curl.exe` for model HTTP requests because the retained Cloudflare bot filter challenged Node fetch and a native Node follow-up request during testing. TLS verification stays enabled, redirects are not followed, credentials are sent through stdin rather than command-line arguments, and disconnects cancel the request. `doctor` checks the connection without loading the model. A browser challenge from zone-wide Bot Fight Mode cannot be solved by an API client; the server owner must configure API-compatible protection. Transport compatibility alone does not guarantee that every computer will be accepted. Cold Strata startup can still take minutes; the client cannot remove server warm-up costs. A Cloudflare 403 is a connection failure, not a model error.
 

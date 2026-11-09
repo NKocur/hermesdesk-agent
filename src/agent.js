@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { generationPayload } from "./generation.js";
 import path from "node:path";
 import { projectSessionDir } from "./config.js";
 import { searchTool } from "./search.js";
@@ -79,12 +80,7 @@ export async function createRuntime({
         onPayload: async (payload, m) => {
           const p = (await options?.onPayload?.(payload, m)) ?? payload;
           delete p.store;
-          delete p.reasoning_effort;
-          p.max_tokens = config.maxTokens;
-          p.temperature = config.temperature;
-          p.top_p = config.topP;
-          p.top_k = config.topK;
-          p.chat_template_kwargs = { enable_thinking: config.thinking };
+          Object.assign(p, generationPayload(config));
           return p;
         },
       });
@@ -107,7 +103,10 @@ export async function createRuntime({
       providerRetry: { maxRetries: 0, timeoutMs: 1800000 },
       compaction: {
         enabled: true,
-        reserveTokens: Math.min(16384, Math.floor(config.context / 4)),
+        reserveTokens: Math.min(
+          config.context - 1024,
+          Math.max(config.maxTokens + 2048, 16384),
+        ),
         keepRecentTokens: Math.min(12000, Math.floor(config.context / 4)),
       },
     });
@@ -152,7 +151,11 @@ export async function createRuntime({
       sessionManager,
       sessionStartEvent,
       model,
-      thinkingLevel: config.thinking ? "medium" : "off",
+      thinkingLevel: config.thinking
+        ? config.reasoningEffort === "xhigh"
+          ? "high"
+          : config.reasoningEffort
+        : "off",
       customTools: [searchTool(target)],
       tools: readOnly
         ? ["read", "ls", "search"]

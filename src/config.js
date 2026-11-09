@@ -2,12 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-export const VERSION = "0.1.0-alpha.3";
+export const VERSION = "0.1.0-alpha.4";
 export const DEFAULTS = {
   baseUrl: null,
   model: null,
   context: 262144,
-  maxTokens: 8192,
+  maxTokens: 131072,
+  reasoningEffort: "xhigh",
+  thinkingBudget: 0,
   thinking: false,
   temperature: 0.7,
   topP: 0.95,
@@ -53,14 +55,21 @@ export function validateConfig(input) {
     throw Error("Invalid model ID.");
   for (const [k, min, max] of [
     ["context", 8192, 1048576],
-    ["maxTokens", 1, 8192],
+    ["maxTokens", 1, 131072],
+    ["thinkingBudget", 0, 131071],
     ["topK", 0, 1000],
     ["maxRequests", 1, 512],
   ])
     if (!Number.isInteger(c[k]) || c[k] < min || c[k] > max)
       throw Error(k + " must be an integer from " + min + " to " + max + ".");
-  if (c.maxTokens >= c.context)
-    throw Error("Output tokens must be below context size.");
+  if (!["low", "medium", "xhigh"].includes(c.reasoningEffort))
+    throw Error("reasoningEffort must be low, medium or xhigh.");
+  if (c.thinkingBudget && c.thinkingBudget >= c.maxTokens)
+    throw Error("Thinking budget must be below the total output limit.");
+  if (c.maxTokens + 1024 >= c.context)
+    throw Error(
+      "Total output must leave at least 1024 context tokens for input.",
+    );
   if (typeof c.thinking !== "boolean")
     throw Error("thinking must be true or false.");
   for (const [k, max] of [
