@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.8
+
+- Show what a local model is doing while you wait: time waiting for the first token, then thinking, writing or tool-call preparation with an estimated token rate, and a note when output stalls.
+- Keep estimated reply/session speeds marked with `~` when token usage is unavailable.
+- Add `/status`: server reachability and response time, model availability, context fill, last-reply speed and time to first token, and the session average.
+- Show the connected model and server in the header, and the last reply's speed and a context-fill bar in the footer.
+- Explain output-limit stops, including when thinking used the whole allowance, and name the setting to change.
+- Refuse a third identical tool call in a row before any approval prompt, so a looping model moves on.
+- Give the model short, concrete working rules, including that the Windows shell is PowerShell.
+- Replace gateway HTML error pages in the transcript with a one-line explanation.
+- Show working state in the terminal title; `HERMESDESK_BELL=on` rings the bell when a run of 30 seconds or more finishes.
+
 ## 0.1.0-alpha.7
 
 - Ctrl+C cancels an active run and returns to the prompt, including streaming replies, running tools and pending approvals. Idle clear-input and double-press-to-exit behavior is preserved.

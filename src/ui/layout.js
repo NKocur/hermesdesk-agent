@@ -40,6 +40,16 @@ export function rule(theme, width, title = "", color = "borderMuted") {
   );
 }
 
+/** A fixed-width fill bar. Any non-zero value shows at least one cell. */
+export function meter(theme, percent, cells = 8, color = "accent") {
+  const share = Math.max(0, Math.min(100, percent || 0)) / 100;
+  const filled = share ? Math.max(1, Math.round(share * cells)) : 0;
+  return (
+    theme.fg(color, "━".repeat(filled)) +
+    theme.fg("borderMuted", "━".repeat(cells - filled))
+  );
+}
+
 /** Wraps another component and prefixes each rendered line, e.g. a status glyph or gutter. */
 export class Prefixed {
   constructor(inner, prefix) {

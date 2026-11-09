@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.7.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.8.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.7.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.8.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -39,7 +39,11 @@ hermesdesk.cmd chat --session SESSION_ID
 hermesdesk.cmd chat --read-only
 ```
 
-The interactive terminal uses Pi's UI, streaming, diffs, tool displays, session history and compaction, with a HermesDesk presentation layer (`src/ui/`). A compact header shows the safety mode and key commands; a two-line footer shows the workspace and git branch, model, thinking effort, output limit, approval mode, token totals and context fill. Tool calls appear as one line with a status mark (`●` running, `✓` done, `✗` failed or declined) and their output sits behind a quiet gutter; `ctrl+o` expands long output. Edits, writes and commands open an approval panel with a diff, file preview or highlighted command: `y` allows once, `n` or Escape denies.
+The interactive terminal uses Pi's UI, streaming, diffs, tool displays, session history and compaction, with a HermesDesk presentation layer (`src/ui/`). A compact header shows the connected model and server, the safety mode and key commands; a two-line footer shows the workspace and git branch, model, thinking effort, output limit, approval mode, token totals, the last reply's speed and a context-fill bar. Tool calls appear as one line with a status mark (`●` running, `✓` done, `✗` failed or declined) and their output sits behind a quiet gutter; `ctrl+o` expands long output. Edits, writes and commands open an approval panel with a diff, file preview or highlighted command: `y` allows once, `n` or Escape denies.
+
+Because the model runs on your own hardware, the working line says what it is waiting for: `Waiting for model · 24s · processing the prompt` before the first token (a wait of a minute or more adds that the model may still be loading), then `Thinking`, `Writing` or `Preparing edit` with an estimated tokens-per-second rate, and a note when output stalls. `/status` checks that the server answers and the model is listed (without loading it), and reports context fill, the last reply's speed and time to first token, and the session average. When a reply stops at the output limit, a notice says whether thinking used the whole allowance and which setting to change. The terminal title shows `●` while the agent works; set `HERMESDESK_BELL=on` to also ring the terminal bell when a run of 30 seconds or more finishes.
+
+If the model issues the same tool call three times in a row, the third and later calls are refused without an approval prompt and the model is told to take a different step. The count resets with each message you send.
 
 Colors follow the terminal background automatically, using the HermesDesk light or dark palette. Body text keeps the terminal's own foreground color, and fonts and sizes always come from the terminal. Set `HERMESDESK_THEME` to `light` or `dark` to force a palette (for terminals that do not report their background), or `terminal` to use Pi's palette derived from your terminal colors.
 
@@ -72,6 +76,7 @@ Use these inside interactive chat. Commands run locally, consume no model tokens
 /thinking-budget auto
 /limits show
 /limits save
+/status
 ```
 
 `/limits` opens a settings menu for the same controls, showing each current value; `/profile` and `/think` without a value open menus that mark the active choice. Profiles are `fast` (32K, thinking off), `balanced` (64K, xhigh), and `extended` (131K, xhigh). Output counts include thinking and answer. The model can stop before the allowance is used, and Strata can reduce the thinking cap to preserve answer room. Individual controls keep your other sampler settings; profiles apply the recommended sampler values.

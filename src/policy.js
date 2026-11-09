@@ -55,6 +55,7 @@ export function workspacePath(root, value = ".") {
     throw Error("A link leaves the workspace or targets a protected path.");
   return target;
 }
+const REPEAT_LIMIT = 2;
 export function policyExtension({
   root,
   readOnly = false,
@@ -63,9 +64,13 @@ export function policyExtension({
   onAgentStart = () => {},
 }) {
   return (pi) => {
-    let requests = 0;
+    let requests = 0,
+      lastCall,
+      repeats = 0;
     pi.on("agent_start", () => {
       requests = 0;
+      lastCall = undefined;
+      repeats = 0;
       onAgentStart();
     });
     pi.on("before_provider_request", () => {
@@ -90,6 +95,19 @@ export function policyExtension({
           ].includes(name)
         )
           return { block: true, reason: "Tool is not enabled in this client." };
+        // Smaller models can get stuck repeating one call. Two identical calls in a row are
+        // allowed (a retry); further ones are refused before any approval prompt.
+        const call = name + "\n" + JSON.stringify(input);
+        repeats = call === lastCall ? repeats + 1 : 0;
+        lastCall = call;
+        if (repeats >= REPEAT_LIMIT)
+          return {
+            block: true,
+            reason:
+              "This exact call was already made " +
+              repeats +
+              " times in a row and its result will not change. Use the earlier result, or take a different step.",
+          };
         const shell = ["powershell", "bash"].includes(name),
           mutation = shell || ["edit", "write"].includes(name);
         if (readOnly && mutation)

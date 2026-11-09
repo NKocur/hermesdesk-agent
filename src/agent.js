@@ -4,9 +4,24 @@ import { generationCommands } from "./commands.js";
 import path from "node:path";
 import { VERSION, projectSessionDir, validateConfig } from "./config.js";
 import { searchTool } from "./search.js";
-import { modelFetch } from "./transport.js";
+import { discover, modelFetch } from "./transport.js";
 import { policyExtension, workspacePath } from "./policy.js";
 import { THEME_DIR, interfaceExtension, themeSetting } from "./ui/extension.js";
+import { friendlyError } from "./ui/format.js";
+
+// Written for locally hosted models: short, concrete rules work better than general advice.
+const SYSTEM_PROMPT = [
+  "You are HermesDesk Agent, a coding assistant powered by a locally hosted model. Inspect before editing, preserve unrelated work, verify changes with appropriate checks, and report results honestly. File tools are restricted to the selected workspace; never bypass a declined action. Shell commands require approval and are not OS-sandboxed.",
+  "Working rules:",
+  "- Paths are relative to the workspace. Use search or ls to find code; do not guess file names.",
+  "- Read a file before editing it. Copy each oldText exactly from what you read, including indentation, and keep it short and unique.",
+  "- Use edit to change an existing file. Use write only for a new file or a full rewrite.",
+  "- Take one step at a time and check each tool result before the next step. If a call fails, read the error and change the call; never repeat an identical call.",
+  process.platform === "win32"
+    ? "- The shell is Windows PowerShell, not bash. Use PowerShell syntax and cmdlets."
+    : "- The shell is bash.",
+  "- When the task is done, reply with a short summary of what changed and how it was checked. Do not paste whole files into the reply.",
+].join("\n");
 export async function createRuntime({
   config,
   home,
@@ -152,10 +167,7 @@ export async function createRuntime({
         noThemes: true,
         additionalThemePaths: [THEME_DIR],
         noContextFiles: true,
-        appendSystemPrompt: [
-          "You are HermesDesk Agent, a coding assistant powered by a locally hosted model. Inspect before editing, preserve unrelated work, verify changes with appropriate checks, and report results honestly. File tools are restricted to the selected workspace; never bypass a declined action. Shell commands require approval and are not OS-sandboxed.",
-          ...instructions,
-        ],
+        appendSystemPrompt: [SYSTEM_PROMPT, ...instructions],
         extensionFactories: [
           generationCommands({
             home,
@@ -210,6 +222,7 @@ export async function createRuntime({
             readOnly,
             approveWrites,
             read: syncThinking,
+            discover: () => discover(config, token, access),
           }),
         ],
       },
@@ -283,13 +296,7 @@ export async function runPrompt(
     ) {
       failed = true;
       const detail = e.message.errorMessage || e.message.stopReason;
-      process.stderr.write(
-        "\n" +
-          (/<!doctype|<html/i.test(detail)
-            ? "Cloudflare rejected the API request. Check the connection with hermesdesk doctor."
-            : detail.slice(0, 1200)) +
-          "\n",
-      );
+      process.stderr.write("\n" + friendlyError(detail) + "\n");
     }
   });
   try {

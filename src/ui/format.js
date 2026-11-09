@@ -42,6 +42,41 @@ export function approvalMode({ readOnly, approveWrites }) {
   };
 }
 
+/** Sum input and output tokens over a session's entries. */
+export function usageTotals(entries = []) {
+  let input = 0,
+    output = 0;
+  for (const entry of entries) {
+    const u =
+      entry.type === "message" && entry.message?.role === "assistant"
+        ? entry.message.usage
+        : entry.type === "usage"
+          ? entry.usage
+          : undefined;
+    if (!u) continue;
+    input += (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
+    output += u.output || 0;
+  }
+  return { input, output };
+}
+
+/** Context fill as display text: "13", "4.2", or "?" when unknown. */
+export function percentText(percent) {
+  return percent === null || percent === undefined
+    ? "?"
+    : percent < 10
+      ? percent.toFixed(1)
+      : Math.round(percent).toString();
+}
+
+/** A model error fit to show: gateway HTML pages become one sentence, long text is cut. */
+export function friendlyError(detail) {
+  const text = String(detail ?? "");
+  return /<!doctype|<html/i.test(text)
+    ? "Cloudflare rejected the API request. Check the connection with hermesdesk doctor."
+    : text.slice(0, 1200);
+}
+
 /** Shorten a directory for display: home becomes ~, and long paths keep their last segments. */
 export function displayPath(
   dir,

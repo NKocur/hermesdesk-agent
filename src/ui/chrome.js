@@ -1,21 +1,34 @@
 // Startup header and persistent footer for interactive chat.
+import { rateText } from "./activity.js";
 import {
   BRAND,
   countText,
   displayPath,
   limitText,
+  percentText,
   thinkingText,
+  usageTotals,
 } from "./format.js";
 import {
   fitSegments,
+  meter,
   spread,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
 } from "./layout.js";
 
-/** Brand line, one orientation line, and the commands people need first. */
-export function headerFactory({ version, mode, keyText }) {
+/** The server's host name, so it is clear which machine is doing the work. */
+export function serverHost(baseUrl) {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return "";
+  }
+}
+
+/** Brand and connected model, one orientation line, and the commands people need first. */
+export function headerFactory({ version, mode, keyText, read }) {
   const key = (id, fallback) => {
     try {
       return keyText?.(id) || fallback;
@@ -27,10 +40,18 @@ export function headerFactory({ version, mode, keyText }) {
     render(width) {
       const sep = theme.fg("dim", " · ");
       const brand =
+        " " +
         theme.fg("accent", "◆ ") +
         theme.bold(BRAND) +
         " " +
         theme.fg("dim", version);
+      const config = read?.() ?? {};
+      const host = serverHost(config.baseUrl);
+      const server = config.model
+        ? theme.fg("muted", config.model) +
+          (host ? theme.fg("dim", " on " + host) : "") +
+          " "
+        : "";
       const about =
         mode.short === "read-only"
           ? "Read-only: the agent can read and search this workspace, but cannot change it."
@@ -40,6 +61,7 @@ export function headerFactory({ version, mode, keyText }) {
               : "Edits apply without asking; commands ask first.");
       const hints = [
         theme.fg("accent", "/limits") + theme.fg("dim", " settings"),
+        theme.fg("accent", "/status") + theme.fg("dim", " server"),
         theme.fg("accent", "/profile"),
         theme.fg("accent", "/think"),
         theme.fg("dim", "ctrl+c stop"),
@@ -47,7 +69,7 @@ export function headerFactory({ version, mode, keyText }) {
       ];
       const room = Math.max(1, width - 3);
       return [
-        " " + truncateToWidth(brand, width - 1, "…"),
+        spread(brand, server, width),
         ...wrapTextWithAnsi(theme.fg("muted", about), room).map(
           (line) => "   " + line,
         ),
@@ -61,10 +83,10 @@ export function headerFactory({ version, mode, keyText }) {
 
 /**
  * Two-line footer:
- *   workspace · branch                       model · think xhigh · 64K out
- *   ● approval mode   other statuses                  ↑in ↓out · ctx 3% of 256K
+ *   workspace · branch                          model · think xhigh · 64K out
+ *   ● approval mode   statuses      ↑in ↓out · 38 tok/s · ━━━━━━━━ ctx 3% of 256K
  */
-export function footerFactory({ getContext, read, mode }) {
+export function footerFactory({ getContext, read, mode, activity }) {
   return (tui, theme, footerData) => {
     const unsubscribe = footerData.onBranchChange?.(() => tui.requestRender());
     let cacheKey, cached;
@@ -72,22 +94,10 @@ export function footerFactory({ getContext, read, mode }) {
       const sm = ctx.sessionManager;
       const entries = sm.getEntries();
       const keyNow = `${sm.getSessionId?.()}:${sm.getLeafId?.()}:${entries.length}`;
-      if (keyNow === cacheKey) return cached;
-      let input = 0,
-        output = 0;
-      for (const entry of entries) {
-        const u =
-          entry.type === "message" && entry.message?.role === "assistant"
-            ? entry.message.usage
-            : entry.type === "usage"
-              ? entry.usage
-              : undefined;
-        if (!u) continue;
-        input += (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
-        output += u.output || 0;
+      if (keyNow !== cacheKey) {
+        cacheKey = keyNow;
+        cached = usageTotals(entries);
       }
-      cacheKey = keyNow;
-      cached = { input, output };
       return cached;
     };
     return {
@@ -146,15 +156,13 @@ export function footerFactory({ getContext, read, mode }) {
           (statuses.length ? "  " + statuses.join(dot) : "");
         const windowSize = context?.contextWindow ?? config.context;
         const percent = context?.percent;
-        const pct =
-          percent === null || percent === undefined
-            ? "?"
-            : percent < 10
-              ? percent.toFixed(1)
-              : Math.round(percent).toString();
         const tone = percent > 90 ? "error" : percent > 70 ? "warning" : "dim";
-        // Context fill matters most, so it is kept when the line is too narrow for token totals.
-        const fill = theme.fg(tone, `ctx ${pct}% of ${limitText(windowSize)}`);
+        const fill = theme.fg(
+          tone,
+          `ctx ${percentText(percent)}% of ${limitText(windowSize)}`,
+        );
+        const bar =
+          meter(theme, percent, 8, tone === "dim" ? "accent" : tone) + " ";
         const totals =
           tokens.input || tokens.output
             ? theme.fg(
@@ -162,9 +170,19 @@ export function footerFactory({ getContext, read, mode }) {
                 `↑${countText(tokens.input)} ↓${countText(tokens.output)}`,
               ) + dot
             : "";
+        const rate = activity?.last?.rate;
+        const speed = rate
+          ? theme.fg(
+              "muted",
+              (activity.last.estimated ? "~" : "") + rateText(rate),
+            ) + dot
+          : "";
+        // Context fill matters most, so it is the last thing dropped on narrow terminals.
         const room = width - visibleWidth(left2) - 3;
         const right2 =
-          visibleWidth(totals + fill) <= room ? totals + fill : fill;
+          [totals + speed + bar + fill, speed + bar + fill, bar + fill].find(
+            (text) => visibleWidth(text) <= room,
+          ) ?? fill;
         return [
           spread(where, right1 + " ", width),
           spread(left2, right2 + " ", width),
