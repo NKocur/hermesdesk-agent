@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.11.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.12.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.11.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.12.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -52,6 +52,8 @@ Escape interrupts work. `/quit` exits; `/new` starts a new conversation and `/re
 File tools are restricted to the chosen project and reject outside links and protected paths such as `.env`, `.git`, credential files and agent configurations. Edits and shell commands ask for approval by default. Shell commands execute as your user and are **not OS-sandboxed**; after approval they can access anything your account can access. Direct `!` shell shortcuts are disabled so commands use the managed approval path. Project JavaScript extensions, MCP servers and packages are not automatically loaded.
 
 The root project's `AGENTS.md` is included as instructions when it is an ordinary allowed file under 64 KiB. Existing global Pi/Claude settings are not imported. This first version does not synchronize HermesDesk chats, workspace memory or Hermes's skill-learning loop.
+
+HermesDesk pins Pi as an SDK dependency. Automatic Pi update banners and startup changelog notices are suppressed; update this client with `npm.cmd install -g --ignore-scripts hermesdesk-agent@alpha`. The dependency is updated through a tested HermesDesk release.
 
 ## Headless jobs and automation
 

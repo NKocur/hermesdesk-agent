@@ -73,6 +73,7 @@ export async function createRuntime({
   process.env.PI_CODING_AGENT_DIR = agentDir;
   const {
     ModelRuntime,
+    VERSION: piVersion,
     SettingsManager,
     SessionManager,
     createAgentSessionServices,
@@ -150,6 +151,8 @@ export async function createRuntime({
     const settingsManager = SettingsManager.inMemory({
       enableAnalytics: false,
       enableInstallTelemetry: false,
+      // SDK release notes are not HermesDesk release notes; keep them out of startup.
+      lastChangelogVersion: piVersion,
       packages: [],
       cacheWarming: "off",
       // HermesDesk draws its own header; skip Pi's resource listing at startup.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.12
+
+- Suppress automatic Pi update banners and their changelog link with the SDK's supported version-check flag.
+- Mark the bundled SDK changelog version as seen in HermesDesk's in-memory settings, preventing unrelated startup release notes.
+- Keep normal model networking enabled and direct users to update the HermesDesk package rather than its pinned SDK dependency.
+
 ## 0.1.0-alpha.11
 
 - Add Fuck it Mode to `/permissions`: `fuck-it` auto-approves edits and shell commands; `ask` restores approval prompts.
