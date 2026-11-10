@@ -61,10 +61,11 @@ export function headerFactory({ version, mode, keyText, read }) {
               : "Edits apply without asking; commands ask first.");
       const hints = [
         theme.fg("accent", "/limits") + theme.fg("dim", " settings"),
+        theme.fg("accent", "/permissions"),
+        theme.fg("dim", "ctrl+c stop"),
         theme.fg("accent", "/status") + theme.fg("dim", " server"),
         theme.fg("accent", "/profile"),
         theme.fg("accent", "/think"),
-        theme.fg("dim", "ctrl+c stop"),
         theme.fg("dim", key("app.tools.expand", "ctrl+o") + " tool output"),
       ];
       const room = Math.max(1, width - 3);

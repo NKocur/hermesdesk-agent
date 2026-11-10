@@ -62,6 +62,7 @@ export function policyExtension({
   approveWrites = false,
   approveCommands = false,
   onPolicyBlock = () => {},
+  readPermissions = () => ({ readOnly, approveWrites, approveCommands }),
   maxRequests = 16,
   onAgentStart = () => {},
 }) {
@@ -116,12 +117,18 @@ export function policyExtension({
           );
         const shell = ["powershell", "bash"].includes(name),
           mutation = shell || ["edit", "write"].includes(name);
-        if (readOnly && mutation) return block("Read-only mode is enabled.");
+        const permission = readPermissions();
+        if (permission.readOnly && mutation)
+          return block("Read-only mode is enabled.");
         const target = shell
           ? undefined
           : workspacePath(root, input.path || ".");
         if (mutation) {
-          if ((!shell && approveWrites) || (shell && approveCommands)) return;
+          if (
+            (!shell && permission.approveWrites) ||
+            (shell && permission.approveCommands)
+          )
+            return;
           if (!ctx.hasUI)
             return block(
               shell

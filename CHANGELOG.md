@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.10
+
+- Add `/permissions` with a menu and direct `ask`, `edits`, `read-only` and `show` commands; changes update the running tool policy and status displays immediately.
+- Keep changes local to the current CLI process, block changes during active work, preserve read-only launch restrictions, and prevent headless prompts from changing permissions.
+- Use stable approval-policy instructions across permission modes; auto-approving edits continues to ask for shell commands and preserve protected file paths.
+
 ## 0.1.0-alpha.9
 
 - Add a persistent `headless` JSONL mode with correlated prompts, job events/results, state queries, cancellation and graceful shutdown; it keeps one conversation and workspace per process and opens no network port.

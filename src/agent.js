@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { generationPayload } from "./generation.js";
 import { generationCommands } from "./commands.js";
+import { createPermissions, permissionsCommands } from "./permissions.js";
 import path from "node:path";
 import { VERSION, projectSessionDir, validateConfig } from "./config.js";
 import { searchTool } from "./search.js";
@@ -11,7 +12,7 @@ import { friendlyError } from "./ui/format.js";
 
 // Written for locally hosted models: short, concrete rules work better than general advice.
 const SYSTEM_PROMPT = [
-  "You are HermesDesk Agent, a coding assistant powered by a locally hosted model. Inspect before editing, preserve unrelated work, verify changes with appropriate checks, and report results honestly. File tools are restricted to the selected workspace; never bypass a declined action. Shell commands require approval and are not OS-sandboxed.",
+  "You are HermesDesk Agent, a coding assistant powered by a locally hosted model. Inspect before editing, preserve unrelated work, verify changes with appropriate checks, and report results honestly. File tools are restricted to the selected workspace; never bypass a declined action. The client enforces approval settings for edits and shell commands. Submit tool calls directly and let the client request permission when needed. Shell commands are not OS-sandboxed.",
   "Working rules:",
   "- Paths are relative to the workspace. Use search or ls to find code; do not guess file names.",
   "- Read a file before editing it. Copy each oldText exactly from what you read, including indentation, and keep it short and unique.",
@@ -36,6 +37,22 @@ export async function createRuntime({
   sessionId,
 }) {
   config = validateConfig({ ...config });
+  const permissions = createPermissions({
+    readOnly,
+    approveWrites,
+    approveCommands,
+  });
+  const toolsFor = (state) =>
+    state.readOnly
+      ? ["read", "ls", "search"]
+      : [
+          "read",
+          "ls",
+          "search",
+          "edit",
+          "write",
+          process.platform === "win32" ? "powershell" : "bash",
+        ];
   let activeSession;
   const syncThinking = () => {
     if (activeSession) {
@@ -150,17 +167,6 @@ export async function createRuntime({
       },
     });
     const instructions = [];
-    if (approveWrites || approveCommands)
-      instructions.push(
-        "For this launch, the user explicitly pre-approved: " +
-          [
-            approveWrites && "workspace file edits",
-            approveCommands && "shell commands",
-          ]
-            .filter(Boolean)
-            .join(" and ") +
-          ". Read-only mode and protected file rules still apply.",
-      );
     try {
       const file = workspacePath(target, "AGENTS.md");
       if (fs.existsSync(file) && fs.statSync(file).size <= 65536)
@@ -221,12 +227,23 @@ export async function createRuntime({
               );
             },
           }),
+          permissionsCommands({
+            permissions,
+            apply: (mode) => {
+              if (!activeSession)
+                throw Error("The session is not ready to change permissions.");
+              permissions.change(mode, (next) =>
+                activeSession.setActiveToolsByName(toolsFor(next)),
+              );
+            },
+          }),
           policyExtension({
             root: target,
             readOnly,
             approveWrites,
             approveCommands,
             onPolicyBlock,
+            readPermissions: permissions.read,
             maxRequests: config.maxRequests,
             onAgentStart: () => {
               requestCount = 0;
@@ -236,6 +253,7 @@ export async function createRuntime({
             version: VERSION,
             readOnly,
             approveWrites,
+            permissionMode: permissions.display,
             read: syncThinking,
             discover: () => discover(config, token, access),
           }),
@@ -253,16 +271,7 @@ export async function createRuntime({
           : config.reasoningEffort
         : "off",
       customTools: [searchTool(target)],
-      tools: readOnly
-        ? ["read", "ls", "search"]
-        : [
-            "read",
-            "ls",
-            "search",
-            "edit",
-            "write",
-            process.platform === "win32" ? "powershell" : "bash",
-          ],
+      tools: toolsFor(permissions.read()),
     });
     activeSession = result.session;
     return { ...result, services, diagnostics: services.diagnostics };

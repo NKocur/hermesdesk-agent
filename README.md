@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.9.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.10.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.9.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.10.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -109,6 +109,18 @@ Each command receives a `response` with its optional correlation `id`, `command`
 Use `--continue` or `--session ID` when starting the process to restore an earlier conversation. For scheduled jobs under another Windows account, sign in under that account or provide session-only credentials; the saved DPAPI credentials belong to the account that created them.
 
 ## In-chat controls
+
+`/permissions` opens an approval-mode menu and takes effect immediately without restarting:
+
+```text
+/permissions ask
+/permissions edits
+/permissions read-only
+/permissions show
+```
+
+`ask` requests approval for edits and shell commands. `edits` auto-approves workspace file edits while shell commands still ask. `read-only` enables reading and searching and blocks file changes/commands; switch back with `/permissions ask` or `edits`. The header, footer and `/status` follow the current mode. Changes are local to the running CLI process, consume no model calls and add no messages to model history. They are blocked during an active run; finish it or press Ctrl+C first. Menu cancellation leaves the mode unchanged. Launching with `--read-only` locks that restriction until you restart without the flag. Headless permissions stay fixed by launch options, and protected file paths remain blocked.
+
 
 Use these inside interactive chat. Commands run locally, consume no model tokens, and change the next request without restarting the conversation:
 

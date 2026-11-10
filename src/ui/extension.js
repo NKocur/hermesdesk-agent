@@ -75,6 +75,7 @@ export function interfaceExtension({
   version,
   readOnly,
   approveWrites,
+  permissionMode,
   read,
   discover,
   activity = createActivity(),
@@ -82,7 +83,7 @@ export function interfaceExtension({
     ? () => process.stdout.write("\x07")
     : undefined,
 }) {
-  const mode = approvalMode({ readOnly, approveWrites });
+  const mode = permissionMode || approvalMode({ readOnly, approveWrites });
   return (pi) => {
     let current, removeInterrupt, timer, shown;
     const tui = (ctx) => ctx?.hasUI && ctx.mode === "tui";

@@ -26,9 +26,17 @@ export function thinkingText(config) {
     : config.reasoningEffort;
 }
 
-export function approvalMode({ readOnly, approveWrites }) {
+export function approvalMode({ readOnly, approveWrites, approveCommands }) {
   if (readOnly)
     return { tone: "warning", short: "read-only", long: "Read-only" };
+  if (approveCommands)
+    return {
+      tone: "warning",
+      short: approveWrites ? "auto-approved" : "commands auto-approved",
+      long: approveWrites
+        ? "Edits and commands auto-approved"
+        : "Commands auto-approved, edits ask",
+    };
   if (approveWrites)
     return {
       tone: "warning",
