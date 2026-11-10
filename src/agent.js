@@ -94,7 +94,19 @@ export async function createRuntime({
     allowModelNetwork: false,
     refreshOnCreate: false,
   });
-  const safeFetch = modelFetch(config.baseUrl, access);
+  const rawFetch = modelFetch(config.baseUrl, access);
+  let transportFailure,
+    transportAttempts = 0;
+  const safeFetch = async (input, init) => {
+    transportFailure = undefined;
+    transportAttempts++;
+    try {
+      return await rawFetch(input, init);
+    } catch (error) {
+      transportFailure = error.message;
+      throw error;
+    }
+  };
   let requestCount = 0;
   modelRuntime.registerProvider("hermesdesk", {
     name: "HermesDesk / Strata",
@@ -120,6 +132,8 @@ export async function createRuntime({
       },
     ],
     streamSimple: (model, context, options) => {
+      transportFailure = undefined;
+      transportAttempts = 0;
       syncThinking();
       if (++requestCount > config.maxRequests)
         throw Error(
@@ -128,7 +142,9 @@ export async function createRuntime({
       return streamSimple(model, context, {
         ...options,
         fetch: safeFetch,
-        maxRetries: 0,
+        // The SDK retries only before the response stream is opened.
+        // Keep whole-agent retries disabled so partial replies/tools are not replayed.
+        maxRetries: 2,
         timeoutMs: 1800000,
         maxTokens: config.maxTokens,
         onPayload: async (payload, m) => {
@@ -159,7 +175,7 @@ export async function createRuntime({
       quietStartup: "header",
       theme: themeSetting(),
       retry: { enabled: false },
-      providerRetry: { maxRetries: 0, timeoutMs: 1800000 },
+      providerRetry: { maxRetries: 2, timeoutMs: 1800000 },
       compaction: {
         enabled: true,
         reserveTokens: Math.min(
@@ -260,6 +276,10 @@ export async function createRuntime({
             permissionMode: permissions.display,
             read: syncThinking,
             discover: () => discover(config, token, access),
+            transportError: () =>
+              transportFailure
+                ? { message: transportFailure, attempts: transportAttempts }
+                : undefined,
           }),
         ],
       },

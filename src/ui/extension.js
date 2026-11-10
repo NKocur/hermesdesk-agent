@@ -78,6 +78,7 @@ export function interfaceExtension({
   permissionMode,
   read,
   discover,
+  transportError,
   activity = createActivity(),
   bell = process.env.HERMESDESK_BELL?.trim().toLowerCase() === "on"
     ? () => process.stdout.write("\x07")
@@ -186,7 +187,16 @@ export function interfaceExtension({
       if (message.stopReason === "length" && tui(ctx))
         ctx.ui.notify(truncationNotice(message, read()), "warning");
       if (message.stopReason === "error" && message.errorMessage) {
-        const errorMessage = friendlyError(message.errorMessage);
+        const diagnostic = /^Connection error\.?$/i.test(
+          message.errorMessage.trim(),
+        )
+          ? transportError?.()
+          : undefined;
+        const errorMessage = friendlyError(
+          diagnostic
+            ? `${message.errorMessage} ${diagnostic.message} (${diagnostic.attempts} connection ${diagnostic.attempts === 1 ? "attempt" : "attempts"}).`
+            : message.errorMessage,
+        );
         if (errorMessage !== message.errorMessage)
           return { message: { ...message, errorMessage } };
       }

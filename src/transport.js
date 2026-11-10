@@ -133,6 +133,29 @@ function curlQuote(value) {
     '"'
   );
 }
+// Curl diagnostics can include configuration fragments: redact credentials before
+// they reach persisted assistant errors or terminal output.
+export function curlFailureDetail(stderr, request) {
+  let text = String(stderr || "");
+  for (const name of [
+    "authorization",
+    "cf-access-client-id",
+    "cf-access-client-secret",
+  ]) {
+    const value = request.headers.get(name);
+    if (value) {
+      text = text.split(value).join("[redacted]");
+      if (name === "authorization") {
+        const token = value.replace(/^Bearer\s+/i, "");
+        if (token) text = text.split(token).join("[redacted]");
+      }
+    }
+  }
+  return text
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 600);
+}
 export async function curlFetch(input, init) {
   const r = new Request(input, init);
   r.signal.throwIfAborted();
@@ -167,6 +190,10 @@ export async function curlFetch(input, init) {
         "--http1.1",
         "--include",
         "--compressed",
+        "--connect-timeout",
+        "20",
+        "--keepalive-time",
+        "30",
         "--max-time",
         "1800",
         "--config",
@@ -205,12 +232,20 @@ export async function curlFetch(input, init) {
         reject(error);
       }
     };
-    const fail = () => {
+    let stderr = "";
+    const fail = (event) => {
       if (bodyClosed) return;
+      const code = typeof event === "number" ? event : child.exitCode;
+      const detail = curlFailureDetail(
+        stderr || (event instanceof Error ? event.message : ""),
+        r,
+      );
       const error = new Error(
         "Windows HTTP transport failed" +
-          (child.exitCode ? " (curl " + child.exitCode + ")" : "") +
-          ". Check the server address and connection.",
+          (code ? " (curl " + code + ")" : "") +
+          (detail
+            ? ". " + detail
+            : ". Check the server address and connection."),
       );
       finishBody(error);
       if (!settled) {
@@ -219,7 +254,10 @@ export async function curlFetch(input, init) {
       }
     };
     r.signal.addEventListener("abort", abort, { once: true });
-    child.stderr.resume();
+    child.stderr.on("data", (chunk) => {
+      if (stderr.length < 4096)
+        stderr += chunk.toString("utf8").slice(0, 4096 - stderr.length);
+    });
     child.on("error", fail);
     child.stdin.on("error", () => {});
     child.stdout.on("data", (chunk) => {
@@ -285,7 +323,7 @@ export async function curlFetch(input, init) {
       r.signal.removeEventListener("abort", abort);
       if (bodyClosed) return;
       if (code === 0 && headersDone) finishBody();
-      else fail();
+      else fail(code);
     });
     if (r.signal.aborted) {
       abort();

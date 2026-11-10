@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.13
+
+- Retry transient failures up to twice before the model response stream opens, keeping whole-agent and mid-stream replay disabled.
+- Preserve curl diagnostic details in connection errors, redact access credentials before reporting them, and show the attempted connection count when the provider would otherwise report only Connection error.
+- Bound Windows connection setup to 20 seconds and enable TCP keepalive timing.
+- Verify that authentication errors are not retried, cancellation stops backoff, and completed tool actions are not replayed during recovery.
+
 ## 0.1.0-alpha.12
 
 - Suppress automatic Pi update banners and their changelog link with the SDK's supported version-check flag.
