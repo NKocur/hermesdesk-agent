@@ -58,7 +58,9 @@ export function headerFactory({ version, mode, keyText, read }) {
           : "File tools stay inside this workspace. " +
             (mode.short === "asks first"
               ? "Edits and commands ask first."
-              : "Edits apply without asking; commands ask first.");
+              : mode.short === "Fuck it Mode"
+                ? "Edits and shell commands run without asking."
+                : "Edits apply without asking; commands ask first.");
       const hints = [
         theme.fg("accent", "/limits") + theme.fg("dim", " settings"),
         theme.fg("accent", "/permissions"),

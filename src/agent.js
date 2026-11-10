@@ -232,9 +232,10 @@ export async function createRuntime({
             apply: (mode) => {
               if (!activeSession)
                 throw Error("The session is not ready to change permissions.");
-              permissions.change(mode, (next) =>
-                activeSession.setActiveToolsByName(toolsFor(next)),
-              );
+              permissions.change(mode, (next) => {
+                if (next.readOnly !== permissions.read().readOnly)
+                  activeSession.setActiveToolsByName(toolsFor(next));
+              });
             },
           }),
           policyExtension({

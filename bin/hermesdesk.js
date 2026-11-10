@@ -85,7 +85,8 @@ const help = `HermesDesk Agent ${VERSION} (Pi-based, Windows first)
   hermesdesk config [set KEY VALUE | preset fast|balanced|extended]
   hermesdesk logout
 
-Edits and shell commands ask for approval in interactive chat.
+Interactive chat asks before edits and commands by default.
+/permissions fuck-it enables Fuck it Mode; /permissions ask restores approval prompts.
 One-shot runs deny changes by default; --approve-writes permits workspace file edits.
 Headless commands are denied unless --approve-commands explicitly permits them.
 --read-only overrides both pre-approvals. Shell commands are not OS-sandboxed.

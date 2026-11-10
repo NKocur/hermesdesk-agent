@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.11
+
+- Add Fuck it Mode to `/permissions`: `fuck-it` auto-approves edits and shell commands; `ask` restores approval prompts.
+- Show the named mode in the menu, header, footer and status, with descriptions matching actual command approval behavior.
+- Preserve read-only launch restrictions, idle-only changes and fixed headless launch permissions. The mode is local to the running CLI process.
+- Avoid rebuilding tool availability when switching between approval modes with the same tool set.
+
 ## 0.1.0-alpha.10
 
 - Add `/permissions` with a menu and direct `ask`, `edits`, `read-only` and `show` commands; changes update the running tool policy and status displays immediately.

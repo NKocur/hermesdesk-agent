@@ -80,6 +80,7 @@ test("busy, invalid, cancelled and headless permission changes cannot change pol
   f.busy(true);
   await f.run("edits");
   assert.match(f.notices.at(-1).text, /current run/);
+  await f.run("fuck-it");
   f.busy(false);
   for (const mode of ["all", "wrong", "__proto__", "constructor"])
     await f.run(mode);
@@ -88,6 +89,7 @@ test("busy, invalid, cancelled and headless permission changes cannot change pol
   assert.equal(f.permissions.mode(), "ask");
   f.ctx.mode = "rpc";
   await f.run("edits");
+  await f.run("fuck-it");
   assert.equal(f.count(), 0);
   assert.match(f.notices.at(-1).text, /Headless permissions are fixed/);
   f.ctx.mode = "tui";
@@ -109,7 +111,7 @@ test("permission changes recheck busy state after an open menu and preserve laun
     approveWrites: true,
     approveCommands: true,
   });
-  for (const mode of ["ask", "edits"]) await locked.run(mode);
+  for (const mode of ["ask", "edits", "fuck-it"]) await locked.run(mode);
   assert.equal(locked.count(), 0);
   assert.equal(locked.permissions.read().approveWrites, false);
   assert.match(locked.notices.at(-1).text, /launched with --read-only/);
@@ -171,6 +173,12 @@ test("existing header/footer components follow live permission changes", () => {
   p.change("edits");
   assert.match(header.render(150).join("\n"), /Edits apply without asking/);
   assert.match(footer.render(150).join("\n"), /edits auto-approved/);
+  p.change("fuck-it");
+  assert.match(
+    header.render(150).join("\n"),
+    /Edits and shell commands run without asking/,
+  );
+  assert.match(footer.render(150).join("\n"), /Fuck it Mode/);
   p.change("read-only");
   assert.match(header.render(150).join("\n"), /Read-only/);
   assert.match(footer.render(150).join("\n"), /read-only/);
@@ -192,22 +200,37 @@ test(
       req.on("end", () => {
         const b = JSON.parse(raw);
         calls.push(b);
-        const lastUser = b.messages.findLast((m) => m.role === "user");
-        const name = String(lastUser?.content).includes("second")
+        const lastUser = b.messages.findLast(
+          (m) =>
+            m.role === "user" &&
+            /Create first file|Create second file|Run shell in Fuck it Mode/.test(
+              JSON.stringify(m.content),
+            ),
+        );
+        const name = JSON.stringify(lastUser?.content).includes("second")
           ? "second.txt"
           : "first.txt";
         const toolResult = b.messages.at(-1)?.role === "tool";
+        const shell = JSON.stringify(lastUser?.content).includes("Run shell");
         const delta = toolResult
           ? { content: "Done" }
           : {
               tool_calls: [
                 {
                   index: 0,
-                  id: "write-" + name,
+                  id: (shell ? "shell-" : "write-") + name,
                   type: "function",
                   function: {
-                    name: "write",
-                    arguments: JSON.stringify({ path: name, content: "saved" }),
+                    name: shell
+                      ? process.platform === "win32"
+                        ? "powershell"
+                        : "bash"
+                      : "write",
+                    arguments: JSON.stringify(
+                      shell
+                        ? { command: "echo FUCK_IT_COMMAND_OK" }
+                        : { path: name, content: "saved" },
+                    ),
                   },
                 },
               ],
@@ -265,6 +288,12 @@ test(
     assert.equal(runtime.session.messages.length, before);
     await runtime.session.prompt("Create first file");
     assert.equal(fs.readFileSync(path.join(cwd, "first.txt"), "utf8"), "saved");
+    await runtime.session.prompt("/permissions fuck-it");
+    await runtime.session.prompt("Run shell in Fuck it Mode");
+    assert.match(
+      JSON.stringify(calls.at(-1).messages.filter((m) => m.role === "tool")),
+      /FUCK_IT_COMMAND_OK/,
+    );
     await runtime.session.prompt("/permissions read-only");
     assert.deepEqual(runtime.session.getActiveToolNames().sort(), [
       "ls",
@@ -279,10 +308,10 @@ test(
     assert.ok(
       notices.some((text) => text.includes("Edits and commands ask first")),
     );
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 6);
     assert.equal(
       calls[0].messages[0].content,
-      calls[2].messages[0].content,
+      calls[4].messages[0].content,
       "ask/edits use stable system instructions",
     );
     assert.ok(
@@ -292,3 +321,58 @@ test(
     );
   },
 );
+
+test("Fuck it Mode uses its requested name, supports direct aliases, and auto-approves both mutation types", async (t) => {
+  const f = commands();
+  for (const alias of ["fuck-it", "fuck it", "fuck it mode"]) {
+    await f.run(alias);
+    assert.equal(f.permissions.mode(), "fuck-it");
+    assert.deepEqual(f.permissions.read(), {
+      readOnly: false,
+      approveWrites: true,
+      approveCommands: true,
+    });
+    assert.equal(f.permissions.display.short, "Fuck it Mode");
+    assert.equal(f.permissions.display.tone, "warning");
+  }
+  assert.deepEqual(f.command.getArgumentCompletions("fu"), [
+    { value: "fuck-it", label: "Fuck it Mode" },
+  ]);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hd-fuck-it-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const hooks = {};
+  let approvals = 0;
+  policyExtension({ root, readPermissions: f.permissions.read })({
+    on: (name, handler) => (hooks[name] = handler),
+  });
+  const ctx = {
+    hasUI: true,
+    mode: "rpc",
+    ui: {
+      confirm: async () => {
+        approvals++;
+        return false;
+      },
+    },
+  };
+  const call = (toolName, input) => hooks.tool_call({ toolName, input }, ctx);
+  assert.equal(
+    await call("write", { path: "example.txt", content: "x" }),
+    undefined,
+  );
+  assert.equal(
+    await call("powershell", { command: "echo allowed" }),
+    undefined,
+  );
+  assert.equal(approvals, 0);
+  assert.match(
+    (await call("write", { path: ".env", content: "x" })).reason,
+    /Protected path/,
+  );
+  await f.run("ask");
+  assert.equal(
+    (await call("powershell", { command: "echo ask-again" })).block,
+    true,
+  );
+  assert.equal(approvals, 1, "returning to ask restores command approval");
+});

@@ -32,9 +32,9 @@ export function approvalMode({ readOnly, approveWrites, approveCommands }) {
   if (approveCommands)
     return {
       tone: "warning",
-      short: approveWrites ? "auto-approved" : "commands auto-approved",
+      short: approveWrites ? "Fuck it Mode" : "commands auto-approved",
       long: approveWrites
-        ? "Edits and commands auto-approved"
+        ? "Fuck it Mode (edits and commands auto-approved)"
         : "Commands auto-approved, edits ask",
     };
   if (approveWrites)

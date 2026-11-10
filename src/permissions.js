@@ -5,11 +5,14 @@ import { chooseItem } from "./ui/menu.js";
 export const PERMISSION_MODES = {
   ask: { readOnly: false, approveWrites: false, approveCommands: false },
   edits: { readOnly: false, approveWrites: true, approveCommands: false },
+  "fuck-it": { readOnly: false, approveWrites: true, approveCommands: true },
   "read-only": { readOnly: true, approveWrites: false, approveCommands: false },
 };
 const NOTES = {
   ask: "Edits and shell commands ask first.",
   edits: "File edits apply automatically; shell commands ask first.",
+  "fuck-it":
+    "Auto-approve edits and shell commands; commands run with your account access.",
   "read-only":
     "Read and search only; file edits and shell commands are blocked.",
 };
@@ -30,12 +33,19 @@ export function createPermissions({
     lockedReadOnly,
     read: () => ({ ...current }),
     mode: () =>
-      current.readOnly ? "read-only" : current.approveWrites ? "edits" : "ask",
+      current.readOnly
+        ? "read-only"
+        : current.approveWrites && current.approveCommands
+          ? "fuck-it"
+          : current.approveWrites
+            ? "edits"
+            : "ask",
     change(mode, beforeChange = () => {}) {
       const next = Object.hasOwn(PERMISSION_MODES, mode)
         ? PERMISSION_MODES[mode]
         : undefined;
-      if (!next) throw Error("Usage: /permissions ask|edits|read-only|show");
+      if (!next)
+        throw Error("Usage: /permissions ask|edits|fuck-it|read-only|show");
       if (lockedReadOnly && mode !== "read-only")
         throw Error(
           "This CLI was launched with --read-only. Restart without that flag to permit edits or commands.",
@@ -63,14 +73,19 @@ export function permissionsCommands({ permissions, apply }) {
         );
     };
     pi.registerCommand("permissions", {
-      description: "Approval mode: ask, auto-approve edits, or read-only",
+      description:
+        "Approval mode: ask, auto-approve edits, Fuck it Mode, or read-only",
       getArgumentCompletions: (prefix) =>
         [...Object.keys(PERMISSION_MODES), "show"]
           .filter((value) => value.startsWith(prefix.trim().toLowerCase()))
-          .map((value) => ({ value, label: value })),
+          .map((value) => ({
+            value,
+            label: value === "fuck-it" ? "Fuck it Mode" : value,
+          })),
       handler: async (args, ctx) => {
         try {
           let mode = args.trim().toLowerCase();
+          if (/^fuck[ -]+it(?:[ -]+mode)?$/.test(mode)) mode = "fuck-it";
           if (mode === "show") return show(ctx);
           if (!ctx.hasUI || ctx.mode !== "tui")
             throw Error(
@@ -82,7 +97,7 @@ export function permissionsCommands({ permissions, apply }) {
               title: "Permissions",
               subtitle: permissions.lockedReadOnly
                 ? "This launch is restricted by --read-only."
-                : "Applies immediately to this CLI process. Commands always ask in interactive chat.",
+                : "Applies immediately to this CLI process. Fuck it Mode also auto-approves shell commands.",
               items: Object.keys(PERMISSION_MODES)
                 .filter(
                   (value) =>
@@ -95,7 +110,9 @@ export function permissionsCommands({ permissions, apply }) {
                       ? "Ask first"
                       : value === "edits"
                         ? "Auto-approve edits"
-                        : "Read-only",
+                        : value === "fuck-it"
+                          ? "Fuck it Mode"
+                          : "Read-only",
                   description: NOTES[value],
                   current: permissions.mode() === value,
                 })),

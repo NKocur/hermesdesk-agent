@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/NKocur/hermesdesk-agent/actions/workflows/ci.yml)
 
-**Windows alpha: 0.1.0-alpha.10.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
+**Windows alpha: 0.1.0-alpha.11.** Community client built on Pi; not affiliated with or endorsed by Earendil Works or Nous Research.
 
 A running HermesDesk inference gateway is required. This client does not include a hosted model service, server access, or API keys.
 
@@ -18,7 +18,7 @@ hermesdesk.cmd connect
 hermesdesk.cmd doctor
 ```
 
-Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.10.tgz`.
+Alternatively, download and extract a Windows alpha bundle from [Releases](https://github.com/NKocur/hermesdesk-agent/releases) and run `Install Agent.cmd`. A tarball can also be installed directly with `npm.cmd install -g --ignore-scripts ./hermesdesk-agent-0.1.0-alpha.11.tgz`.
 
 There is no default server address. `connect` asks for your HTTPS model endpoint ending in `/v1`. When the server supports browser sign-in, it opens your browser: sign in to HermesDesk and approve the computer. The CLI receives a short-lived, single-use authorization code on a loopback listener and redeems it with PKCE over HTTPS, then discovers the model and saves the credentials encrypted. You do not copy passwords, API keys, or connection codes. The browser and CLI must be on the same computer. Use `--no-browser` to open the printed browser link yourself. On legacy servers without browser sign-in, the API-key setup remains available; `--manual` explicitly selects it. No server credentials are included in this package.
 
@@ -49,7 +49,7 @@ Colors follow the terminal background automatically, using the HermesDesk light 
 
 Escape interrupts work. `/quit` exits; `/new` starts a new conversation and `/resume` opens Pi's session selector. The first interactive startup may download Pi's `fd` helper to this client's own Pi cache. Windows Terminal is recommended. Pi's inherited help and exit hints may still mention `pi`; resume this client with `hermesdesk chat --continue` or `--session ID`.
 
-File tools are restricted to the chosen project and reject outside links and protected paths such as `.env`, `.git`, credential files and agent configurations. Each edit and shell command asks for approval. Shell commands execute as your user and are **not OS-sandboxed**; after approval they can access anything your account can access. Direct `!` shell shortcuts are disabled so commands use the managed approval path. Project JavaScript extensions, MCP servers and packages are not automatically loaded.
+File tools are restricted to the chosen project and reject outside links and protected paths such as `.env`, `.git`, credential files and agent configurations. Edits and shell commands ask for approval by default. Shell commands execute as your user and are **not OS-sandboxed**; after approval they can access anything your account can access. Direct `!` shell shortcuts are disabled so commands use the managed approval path. Project JavaScript extensions, MCP servers and packages are not automatically loaded.
 
 The root project's `AGENTS.md` is included as instructions when it is an ordinary allowed file under 64 KiB. Existing global Pi/Claude settings are not imported. This first version does not synchronize HermesDesk chats, workspace memory or Hermes's skill-learning loop.
 
@@ -115,11 +115,12 @@ Use `--continue` or `--session ID` when starting the process to restore an earli
 ```text
 /permissions ask
 /permissions edits
+/permissions fuck-it
 /permissions read-only
 /permissions show
 ```
 
-`ask` requests approval for edits and shell commands. `edits` auto-approves workspace file edits while shell commands still ask. `read-only` enables reading and searching and blocks file changes/commands; switch back with `/permissions ask` or `edits`. The header, footer and `/status` follow the current mode. Changes are local to the running CLI process, consume no model calls and add no messages to model history. They are blocked during an active run; finish it or press Ctrl+C first. Menu cancellation leaves the mode unchanged. Launching with `--read-only` locks that restriction until you restart without the flag. Headless permissions stay fixed by launch options, and protected file paths remain blocked.
+`ask` requests approval for edits and shell commands. `edits` auto-approves workspace file edits while shell commands still ask. **Fuck it Mode** (`/permissions fuck-it`) auto-approves both file edits and shell commands. Commands run with your account access, including access outside the workspace. The header/footer name the active mode; switch back with `/permissions ask`. `read-only` enables reading and searching and blocks file changes/commands; switch back with `/permissions ask` or `edits`. The header, footer and `/status` follow the current mode. Changes are local to the running CLI process, consume no model calls and add no messages to model history. They are blocked during an active run; finish it or press Ctrl+C first. Menu cancellation leaves the mode unchanged. Launching with `--read-only` locks that restriction until you restart without the flag. Headless permissions stay fixed by launch options, and protected file paths remain blocked.
 
 
 Use these inside interactive chat. Commands run locally, consume no model tokens, and change the next request without restarting the conversation:
