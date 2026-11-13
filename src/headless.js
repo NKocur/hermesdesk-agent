@@ -193,6 +193,7 @@ export async function runHeadless(
     signal?.removeEventListener("abort", onAbort);
     off();
   }
+  failure ||= runtime.getLoopStopReason?.();
   const status =
     cancelled ||
     (failure

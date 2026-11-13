@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { requestApproval } from "./ui/approval.js";
+import { createLoopGuard } from "./loop-guard.js";
 const protectedPart = (p) =>
   /^\.env(?:\.|$)/i.test(p) ||
   [".git", ".ssh", ".aws", ".codex", ".claude", ".pi", "node_modules"].includes(
@@ -55,24 +56,52 @@ export function workspacePath(root, value = ".") {
     throw Error("A link leaves the workspace or targets a protected path.");
   return target;
 }
-const REPEAT_LIMIT = 2;
 export function policyExtension({
   root,
   readOnly = false,
   approveWrites = false,
   approveCommands = false,
   onPolicyBlock = () => {},
+  onAgentStart = () => {},
+  onLoopStop = () => {},
   readPermissions = () => ({ readOnly, approveWrites, approveCommands }),
 }) {
   return (pi) => {
-    let lastCall,
-      repeats = 0;
+    const loop = createLoopGuard();
+    const version = (name, input) => {
+      if (["powershell", "bash"].includes(name)) return undefined;
+      try {
+        const target = workspacePath(root, input.path || ".");
+        const stat = fs.statSync(target);
+        return [stat.mtimeMs, stat.size];
+      } catch (error) {
+        return error.code === "ENOENT" ? "missing" : "unavailable";
+      }
+    };
     pi.on("agent_start", () => {
-      lastCall = undefined;
-      repeats = 0;
+      loop.reset();
+      onAgentStart();
+    });
+    pi.on("tool_result", (event) => {
+      try {
+        loop.record(
+          event.toolName,
+          event.input || {},
+          version(event.toolName, event.input || {}),
+          event.isError,
+          event.content,
+        );
+      } catch {}
     });
     pi.on("tool_call", async (event, ctx) => {
       const block = (reason) => {
+        loop.record(
+          event.toolName,
+          event.input || {},
+          version(event.toolName, event.input || {}),
+          true,
+          [{ type: "text", text: reason }],
+        );
         try {
           onPolicyBlock({ name: event.toolName, reason });
         } catch {}
@@ -93,17 +122,23 @@ export function policyExtension({
           ].includes(name)
         )
           return block("Tool is not enabled in this client.");
-        // Smaller models can get stuck repeating one call. Two identical calls in a row are
-        // allowed (a retry); further ones are refused before any approval prompt.
-        const call = name + "\n" + JSON.stringify(input);
-        repeats = call === lastCall ? repeats + 1 : 0;
-        lastCall = call;
-        if (repeats >= REPEAT_LIMIT)
-          return block(
-            "This exact call was already made " +
-              repeats +
-              " times in a row and its result will not change. Use the earlier result, or take a different step.",
-          );
+        const decision = loop.check(name, input, version(name, input));
+        if (decision) {
+          if (decision.terminate) onLoopStop(decision.reason);
+          try {
+            if (ctx.hasUI)
+              ctx.ui.notify?.(
+                decision.reason,
+                decision.terminate ? "error" : "warning",
+              );
+          } catch {}
+          if (!decision.recovery) block(decision.reason);
+          return {
+            block: true,
+            reason: decision.reason,
+            ...(decision.terminate ? { terminate: true } : {}),
+          };
+        }
         const shell = ["powershell", "bash"].includes(name),
           mutation = shell || ["edit", "write"].includes(name);
         const permission = readPermissions();

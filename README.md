@@ -195,3 +195,7 @@ The client is a standalone project. Use the GitHub alpha release assets for the 
 ## License and contributing
 
 MIT. Pi is also MIT-licensed; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for development and [SECURITY.md](SECURITY.md) for reporting security issues.
+
+### Repeated-tool recovery
+
+Jobs have no fixed request-count cap. Repeated unchanged calls or identical tool failures receive one recovery instruction, including the last error. An edit recovery asks the model to reread the current file and use exact current text. If it repeats the same call again, the run ends with a specific loop diagnostic; history and completed changes are preserved. Reading a file between identical failed edits does not reset that failure history. Changed inputs or file contents permit a fresh attempt. A new user message starts fresh. Headless runs report an unrecovered loop as failed rather than completed.

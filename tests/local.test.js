@@ -300,14 +300,20 @@ test("a third identical tool call in a row is refused before any approval prompt
     assert.equal(await call({ path: "a.txt" }), undefined, "one retry is fine");
     const third = await call({ path: "a.txt" });
     assert.equal(third.block, true);
-    assert.match(third.reason, /already made 2 times in a row/);
-    assert.equal((await call({ path: "a.txt" })).block, true);
+    assert.match(third.reason, /Repeated unchanged read/);
+    const stopped = await call({ path: "a.txt" });
+    assert.equal(stopped.terminate, true);
+    assert.match(stopped.reason, /Stopped a repeated-tool loop/);
+    handlers.agent_start();
     assert.equal(await call({ path: "b.txt" }), undefined, "a new call resets");
     assert.equal(await call({ path: "a.txt" }), undefined);
     const shell = { command: "npm test" };
     await call(shell, "powershell");
     await call(shell, "powershell");
-    assert.match((await call(shell, "powershell")).reason, /in a row/);
+    assert.match(
+      (await call(shell, "powershell")).reason,
+      /Repeated unchanged powershell/,
+    );
     assert.equal(prompts, 2, "the refused repeat never asks for approval");
     handlers.agent_start();
     assert.match(

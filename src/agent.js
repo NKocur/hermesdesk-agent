@@ -17,7 +17,7 @@ const SYSTEM_PROMPT = [
   "- Paths are relative to the workspace. Use search or ls to find code; do not guess file names.",
   "- Read a file before editing it. Copy each oldText exactly from what you read, including indentation, and keep it short and unique.",
   "- Use edit to change an existing file. Use write only for a new file or a full rewrite.",
-  "- Take one step at a time and check each tool result before the next step. If a call fails, read the error and change the call; never repeat an identical call.",
+  "- Take one step at a time and check each tool result before the next step. If a call fails, read the error and change the call; never repeat an identical call. When an edit does not match, reread the target file and copy oldText from its current contents; check whether the change was already applied.",
   process.platform === "win32"
     ? "- The shell is Windows PowerShell, not bash. Use PowerShell syntax and cmdlets."
     : "- The shell is bash.",
@@ -53,7 +53,7 @@ export async function createRuntime({
           "write",
           process.platform === "win32" ? "powershell" : "bash",
         ];
-  let activeSession;
+  let activeSession, loopStopReason;
   const syncThinking = () => {
     if (activeSession) {
       const level = activeSession.thinkingLevel;
@@ -133,6 +133,7 @@ export async function createRuntime({
     streamSimple: (model, context, options) => {
       transportFailure = undefined;
       transportAttempts = 0;
+      if (loopStopReason) throw Error(loopStopReason);
       syncThinking();
       return streamSimple(model, context, {
         ...options,
@@ -259,6 +260,12 @@ export async function createRuntime({
             approveCommands,
             onPolicyBlock,
             readPermissions: permissions.read,
+            onAgentStart: () => {
+              loopStopReason = undefined;
+            },
+            onLoopStop: (reason) => {
+              loopStopReason = reason;
+            },
           }),
           interfaceExtension({
             version: VERSION,
@@ -301,7 +308,13 @@ export async function createRuntime({
     if (!file) throw Error("Session not found in this project.");
     sessionManager = SessionManager.open(file, sessionDir, cwd);
   }
-  return createAgentSessionRuntime(factory, { cwd, agentDir, sessionManager });
+  const runtime = await createAgentSessionRuntime(factory, {
+    cwd,
+    agentDir,
+    sessionManager,
+  });
+  runtime.getLoopStopReason = () => loopStopReason;
+  return runtime;
 }
 export async function runPrompt(
   runtime,
@@ -341,6 +354,7 @@ export async function runPrompt(
   try {
     await runtime.session.bindExtensions({});
     await runtime.session.prompt(prompt);
+    if (runtime.getLoopStopReason?.()) throw Error(runtime.getLoopStopReason());
     if (json)
       out.write(
         JSON.stringify({
