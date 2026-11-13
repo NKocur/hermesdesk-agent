@@ -63,24 +63,13 @@ export function policyExtension({
   approveCommands = false,
   onPolicyBlock = () => {},
   readPermissions = () => ({ readOnly, approveWrites, approveCommands }),
-  maxRequests = 16,
-  onAgentStart = () => {},
 }) {
   return (pi) => {
-    let requests = 0,
-      lastCall,
+    let lastCall,
       repeats = 0;
     pi.on("agent_start", () => {
-      requests = 0;
       lastCall = undefined;
       repeats = 0;
-      onAgentStart();
-    });
-    pi.on("before_provider_request", () => {
-      if (++requests > maxRequests)
-        throw Error(
-          "Request budget reached. Continue with a new message if needed.",
-        );
     });
     pi.on("tool_call", async (event, ctx) => {
       const block = (reason) => {

@@ -196,24 +196,30 @@ async function modelServer(t, mode = "read") {
       let content = null,
         tools,
         finish = "stop";
-      if (!results.length) {
+      if (!results.length || (mode === "long-read" && calls.length <= 65)) {
         tools = [
           {
             index: 0,
-            id: "fixture_call",
+            id:
+              mode === "long-read" ? "fixture_" + calls.length : "fixture_call",
             type: "function",
             function: {
               name:
                 mode === "search"
                   ? "search"
-                  : mode === "read"
+                  : ["read", "long-read"].includes(mode)
                     ? "read"
                     : "write",
               arguments: JSON.stringify(
                 mode === "search"
                   ? { query: "MARKER_428" }
-                  : mode === "read"
-                    ? { path: "README.txt" }
+                  : ["read", "long-read"].includes(mode)
+                    ? {
+                        path:
+                          mode === "long-read"
+                            ? "step-" + calls.length + ".txt"
+                            : "README.txt",
+                      }
                     : { path: "hello.txt", content: "HELLO_FROM_PI\n" },
               ),
             },
@@ -320,39 +326,66 @@ test("actual Pi loop cannot write without headless opt-in; explicit opt-in write
   );
 });
 
-test("model request budget stops repeated tool loops without more network calls", async (t) => {
-  const home = folder(t),
-    cwd = path.join(home, "work");
-  fs.mkdirSync(cwd);
-  fs.writeFileSync(path.join(cwd, "README.txt"), "MARKER_428");
-  const server = await modelServer(t, "read");
-  const runtime = await createRuntime({
-    home,
-    cwd,
-    token: "a".repeat(64),
-    config: validateConfig({
-      ...server,
-      model: "fixture",
-      maxTokens: 32,
-      maxRequests: 1,
-    }),
-  });
-  try {
-    await assert.rejects(
-      runPrompt(runtime, "Read README.txt", {
+test(
+  "a productive Pi job continues past 64 requests and ignores a legacy saved request cap",
+  { timeout: 45000 },
+  async (t) => {
+    const home = folder(t),
+      cwd = path.join(home, "work");
+    fs.mkdirSync(cwd);
+    for (let i = 1; i <= 65; i++)
+      fs.writeFileSync(
+        path.join(cwd, "step-" + i + ".txt"),
+        "MARKER_428 step " + i,
+      );
+    const server = await modelServer(t, "long-read");
+    fs.writeFileSync(
+      path.join(home, "config.json"),
+      JSON.stringify({
+        baseUrl: server.baseUrl,
+        model: "fixture",
+        maxTokens: 32,
+        maxRequests: 1,
+      }),
+    );
+    const config = loadConfig(home);
+    assert.equal(Object.hasOwn(config, "maxRequests"), false);
+    const runtime = await createRuntime({
+      home,
+      cwd,
+      token: "a".repeat(64),
+      config,
+    });
+    try {
+      let text = "";
+      await runPrompt(runtime, "Read each numbered step file and finish", {
         out: new Writable({
-          write(_b, _e, cb) {
-            cb();
+          write(chunk, _encoding, callback) {
+            text += chunk;
+            callback();
           },
         }),
-      }),
-      /budget|did not complete/,
-    );
-    assert.equal(server.calls.length, 1);
-  } finally {
-    await runtime.dispose();
-  }
-});
+      });
+      assert.equal(server.calls.length, 66);
+      assert.match(text, /MARKER_428 confirmed/);
+      assert.equal(
+        server.calls.at(-1).messages.filter((m) => m.role === "tool").length,
+        65,
+      );
+      saveConfig(config, home);
+      assert.equal(
+        Object.hasOwn(
+          JSON.parse(fs.readFileSync(path.join(home, "config.json"), "utf8")),
+          "maxRequests",
+        ),
+        false,
+      );
+    } finally {
+      await runtime.dispose();
+    }
+  },
+);
+
 test("continuing a project restores its persisted messages, and session listing finds that project", async (t) => {
   const r = await session(t, "read");
   await r.runtime.dispose();

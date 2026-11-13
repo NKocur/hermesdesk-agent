@@ -107,7 +107,6 @@ export async function createRuntime({
       throw error;
     }
   };
-  let requestCount = 0;
   modelRuntime.registerProvider("hermesdesk", {
     name: "HermesDesk / Strata",
     baseUrl: config.baseUrl,
@@ -135,10 +134,6 @@ export async function createRuntime({
       transportFailure = undefined;
       transportAttempts = 0;
       syncThinking();
-      if (++requestCount > config.maxRequests)
-        throw Error(
-          "Request budget reached. Send another message to continue.",
-        );
       return streamSimple(model, context, {
         ...options,
         fetch: safeFetch,
@@ -264,10 +259,6 @@ export async function createRuntime({
             approveCommands,
             onPolicyBlock,
             readPermissions: permissions.read,
-            maxRequests: config.maxRequests,
-            onAgentStart: () => {
-              requestCount = 0;
-            },
           }),
           interfaceExtension({
             version: VERSION,

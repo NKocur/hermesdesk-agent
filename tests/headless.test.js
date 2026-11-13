@@ -204,10 +204,9 @@ test(
     assert.deepEqual(result.usage, { input: 40, output: 10 });
     assert.equal(first.stderr, "");
     assert.ok(result.session);
-    const second = await f.start(
-      ["run", "-", "--json", "--max-requests", "3"],
-      { stdin: "UTF8 café 🐈" },
-    ).done;
+    const second = await f.start(["run", "-", "--json"], {
+      stdin: "UTF8 café 🐈",
+    }).done;
     assert.equal(second.code, 0, second.stderr);
     for (const line of second.stdout.trim().split("\n")) JSON.parse(line);
     assert.equal(second.records[0].type, "start");

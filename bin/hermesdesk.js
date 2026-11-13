@@ -94,9 +94,9 @@ headless accepts JSON lines on stdin: prompt, abort, get_state, shutdown.
 Exit codes: 0 complete, 1 failure, 2 invalid input, 3 blocked, 4 output limit,
             124 timed out, 130 cancelled, 143 terminated.
 Settings: model, context, maxTokens (total thinking + answer), thinking,
-reasoningEffort (low|medium|xhigh), thinkingBudget (0=automatic), temperature, topP, topK, maxRequests.
+reasoningEffort (low|medium|xhigh), thinkingBudget (0=automatic), temperature, topP, topK.
 Run overrides: --profile fast|balanced|extended --max-tokens N --thinking on|off
-               --reasoning-effort low|medium|xhigh --thinking-budget N --max-requests N
+               --reasoning-effort low|medium|xhigh --thinking-budget N
 `;
 async function main() {
   const { values: v, positionals: p } = parseArgs({
@@ -104,7 +104,6 @@ async function main() {
     options: {
       profile: { type: "string" },
       "max-tokens": { type: "string" },
-      "max-requests": { type: "string" },
       "prompt-file": { type: "string" },
       stdin: { type: "boolean" },
       timeout: { type: "string" },
@@ -361,12 +360,6 @@ async function main() {
     return;
   }
   const overrides = {};
-  if (v["max-requests"] !== undefined)
-    overrides.maxRequests = positiveInteger(
-      v["max-requests"],
-      "--max-requests",
-      512,
-    );
   if (v.profile) Object.assign(overrides, profile(v.profile));
   if (v["max-tokens"] !== undefined)
     overrides.maxTokens = Number(v["max-tokens"]);

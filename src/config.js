@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-export const VERSION = "0.1.0-alpha.13";
+export const VERSION = "0.1.0-alpha.14";
 export const DEFAULTS = {
   baseUrl: null,
   model: null,
@@ -14,7 +14,6 @@ export const DEFAULTS = {
   temperature: 0.7,
   topP: 0.95,
   topK: 20,
-  maxRequests: 64,
 };
 export function configHome() {
   return path.resolve(
@@ -58,7 +57,6 @@ export function validateConfig(input) {
     ["maxTokens", 1, 131072],
     ["thinkingBudget", 0, 131071],
     ["topK", 0, 1000],
-    ["maxRequests", 1, 512],
   ])
     if (!Number.isInteger(c[k]) || c[k] < min || c[k] > max)
       throw Error(k + " must be an integer from " + min + " to " + max + ".");
